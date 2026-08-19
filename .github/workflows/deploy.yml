@@ -1,0 +1,62 @@
+# Deploy หน้าเว็บขึ้น GitHub Pages
+# GitHub Pages เสิร์ฟไฟล์ดิบจาก repo ไม่ได้ build ให้ จึงต้อง build ที่นี่แล้วส่ง dist/ ไปเสิร์ฟ
+#
+# ต้องไปเปิดสวิตช์ใน repo ก่อนครั้งเดียว:
+#   Settings -> Pages -> Build and deployment -> Source = "GitHub Actions"
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: # กดรันเองได้จากแท็บ Actions
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# ถ้า push รัวกัน ให้ตัวใหม่ทำงานแทน แต่ไม่ยกเลิกตัวที่กำลัง deploy ค้างอยู่
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: ติดตั้ง dependency
+        run: npm ci
+
+      - name: ตรวจชนิดข้อมูล
+        run: npm run lint
+
+      - name: Build (base = /Gemba_Audit/ เพราะ Pages เสิร์ฟใต้ subpath ของชื่อ repo)
+        run: npm run build:ghpages
+
+      # GitHub Pages ไม่มีไฟล์ _redirects แบบ Cloudflare
+      # ท่ามาตรฐานของ SPA คือ copy index.html เป็น 404.html
+      # เมื่อเปิด deep link เช่น /Gemba_Audit/coaching/mgr_01 Pages จะเสิร์ฟ 404.html
+      # ซึ่งก็คือแอปทั้งตัว แล้ว React Router จะจัดการเส้นทางต่อเอง
+      - name: สร้าง 404.html สำหรับ client-side routing
+        run: cp dist/index.html dist/404.html
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

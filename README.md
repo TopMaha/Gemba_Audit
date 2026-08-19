@@ -19,11 +19,14 @@ npm run dev
 **วิธีที่ 2 — ดับเบิลคลิกเปิดไฟล์ (ไม่ต้องรันเซิร์ฟเวอร์)**
 
 ```bash
-npm run build
+npm run build:file
 ```
 
-แล้วดับเบิลคลิก `dist/index.html` ได้เลย (build ใช้ path แบบ relative และสลับไปใช้ HashRouter
-อัตโนมัติเมื่อเปิดแบบ `file://` จึงเปิดตรง ๆ ได้ทั้งแอป)
+แล้วดับเบิลคลิก `dist/index.html` ได้เลย (build โหมดนี้ใช้ path แบบ relative และสลับไปใช้
+HashRouter อัตโนมัติเมื่อเปิดแบบ `file://` จึงเปิดตรง ๆ ได้ทั้งแอป)
+
+> ⚠️ อย่าใช้ `npm run build` ธรรมดาแล้วดับเบิลคลิก — โหมดนั้นใช้ path แบบ absolute (`/assets/…`)
+> สำหรับ deploy ขึ้นโฮสต์ เปิดด้วย `file://` จะได้จอขาว
 
 **วิธีที่ 3 — ทดสอบไฟล์ที่ build แล้วบนเซิร์ฟเวอร์**
 
@@ -34,7 +37,8 @@ npm run preview
 | คำสั่ง | หน้าที่ |
 |---|---|
 | `npm run dev` | รันโหมดพัฒนา (พอร์ต 8080) |
-| `npm run build` | สร้างไฟล์สำหรับใช้งานจริงในโฟลเดอร์ `dist/` |
+| `npm run build` | สร้างไฟล์สำหรับ deploy ขึ้นโฮสต์ (Cloudflare Pages) ในโฟลเดอร์ `dist/` |
+| `npm run build:file` | สร้างไฟล์แบบ relative path สำหรับดับเบิลคลิกเปิดด้วย `file://` |
 | `npm run preview` | ดูตัวอย่างไฟล์ที่ build แล้ว |
 | `npm run lint` | ตรวจชนิดข้อมูลด้วย TypeScript (`tsc --noEmit`) |
 | `npm run test` | รันชุดทดสอบ (Vitest) |
