@@ -9,7 +9,8 @@
 | **Cloudflare Pages** (ตัวหลัก) | ✅ ใช้งานได้แล้ว | <https://gemba-audit.pages.dev> |
 | GitHub Pages (ตัวสำรอง) | ⚠️ รอเปิดสวิตช์ 1 จุด | <https://topmaha.github.io/Gemba_Audit/> |
 | **D1 schema + seed** | ✅ เขียนและทดสอบแล้ว | `worker/schema.sql` · `worker/seed.sql` |
-| R2 + Worker API | ⬜ ยังไม่เริ่ม (งานที่ 4–5) | — |
+| **Worker API + R2** | ✅ ใช้งานได้แล้ว | <https://gemba-audit-api.wiphawas-sketchup.workers.dev> |
+| **Frontend เชื่อม backend + PWA** | ✅ ใช้งานได้แล้ว | offline-first + ติดตั้งลงหน้าจอโฮมได้ |
 
 ---
 
@@ -19,6 +20,7 @@
 - [ส่วนที่ 2 — Cloudflare Pages (ตัวหลัก · deploy แล้ว)](#ส่วนที่-2--cloudflare-pages-ตัวหลัก--deploy-แล้ว-)
 - [ส่วนที่ 3 — GitHub Pages (ตัวสำรอง · ยังไม่ทำงาน)](#ส่วนที่-3--github-pages-ตัวสำรอง--ยังไม่ทำงาน-)
 - [ส่วนที่ 4 — ฐานข้อมูล D1](#ส่วนที่-4--ฐานข้อมูล-d1)
+- [ส่วนที่ 5 — Worker API + เชื่อม Frontend](#ส่วนที่-5--worker-api--เชื่อม-frontend)
 - [ภาคผนวก ก — ทำไมของเดิมถึงพัง](#ภาคผนวก-ก--ทำไมของเดิมถึงพัง)
 
 ---
@@ -248,6 +250,161 @@ date('now', '+7 hours')     -- วันนี้ตามเวลาไทย
 | FK CASCADE | ✅ ลบบันทึกแล้วหัวข้อ/ผู้ร่วมเดินหายตาม |
 | CHECK constraint | ✅ ใส่ `status` นอกรายการที่กำหนด ถูกบล็อก |
 | index ถูกใช้จริง | ✅ `SEARCH ... USING INDEX` ไม่ใช่ `SCAN` ทั้งตาราง |
+
+---
+
+## ส่วนที่ 5 — Worker API + เชื่อม Frontend
+
+**API ใช้งานจริง: `https://gemba-audit-api.wiphawas-sketchup.workers.dev`**
+
+### 5.1 คำสั่ง wrangler สำหรับ Worker
+
+ทั้งหมดรันจากโฟลเดอร์ `worker/`
+
+```bash
+cd worker && npx wrangler secret put AUTH_TOKEN
+```
+
+```bash
+cd worker && npx wrangler deploy
+```
+
+```bash
+cd worker && npx wrangler tail
+```
+
+คำสั่งแรกตั้งโทเคน (พิมพ์ค่าแล้วกด Enter — ค่าจะไม่ถูกบันทึกลง repo)
+คำสั่งที่สอง deploy · คำสั่งที่สามดู log สด ๆ ตอนแก้ปัญหา
+
+> ตอนพัฒนาในเครื่องใส่โทเคนไว้ที่ `worker/.dev.vars` (ถูก gitignore แล้ว)
+> ```
+> AUTH_TOKEN=<ค่าที่ตั้งไว้>
+> ```
+
+### 5.2 ตั้งค่าฝั่ง Frontend
+
+คัดลอก `.env.example` เป็น `.env.local` แล้วใส่ค่าจริง
+
+```bash
+cp .env.example .env.local
+```
+
+| ตัวแปร | ค่า |
+|---|---|
+| `VITE_API_URL` | `https://gemba-audit-api.wiphawas-sketchup.workers.dev` (ห้ามมี `/` ท้าย) |
+| `VITE_AUTH_TOKEN` | ค่าเดียวกับที่ตั้งด้วย `wrangler secret put` |
+
+**ถ้าไม่ตั้งสองค่านี้ แอปจะกลับไปทำงานโหมดในเครื่อง** (ข้อมูลตัวอย่างใน localStorage)
+ซึ่งสะดวกตอนพัฒนา UI โดยไม่ต้องมี Worker
+
+จากนั้น deploy หน้าเว็บใหม่ให้ค่าถูกฝังเข้าไป
+
+```bash
+npm run deploy
+```
+
+> ⚠️ **เรื่องความปลอดภัยที่ต้องรู้**
+> `VITE_AUTH_TOKEN` ถูกฝังลงไฟล์ JavaScript ตอน build ใครที่เปิดหน้าเว็บได้ก็อ่านค่านี้ได้
+> มันกันคนที่ยิง API ตรง ๆ จากภายนอกได้ แต่ไม่ได้กันคนที่เข้าถึงหน้าเว็บ
+> เป็นข้อจำกัดของการยืนยันตัวตนแบบเบาที่โจทย์เลือกใช้ (ระบบภายในโรงงาน)
+> ถ้าต้องการกันจริงต้องเพิ่มระบบล็อกอินฝั่งเซิร์ฟเวอร์ที่ออก session token รายคน
+
+### 5.3 ทดสอบว่า API ใช้ได้จริง
+
+```bash
+curl -s https://gemba-audit-api.wiphawas-sketchup.workers.dev/api/health
+```
+
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" https://gemba-audit-api.wiphawas-sketchup.workers.dev/api/managers
+```
+
+```bash
+curl -s -H "X-Auth-Token: <โทเคนของคุณ>" https://gemba-audit-api.wiphawas-sketchup.workers.dev/api/managers
+```
+
+```bash
+curl -s -H "X-Auth-Token: <โทเคนของคุณ>" "https://gemba-audit-api.wiphawas-sketchup.workers.dev/api/dashboard/summary?from=2026-07-20&to=2026-08-19"
+```
+
+**เกณฑ์ผ่าน** — คำสั่งแรกได้ `{"ok":true,...,"db":"ok"}` · คำสั่งที่สองได้ **401**
+(ไม่ส่งโทเคนต้องเข้าไม่ได้) · สองคำสั่งท้ายได้ `{"ok":true,"data":...}`
+
+### 5.4 โครง Frontend หลังเชื่อม backend
+
+หัวใจคือ **หน้าจอทุกหน้ายังอ่าน–เขียนกับสำเนาในเครื่องเหมือนเดิมทุกประการ**
+จึงไม่ต้องแก้หน้าจอสักหน้า ชั้นซิงก์ทำงานอยู่เบื้องหลัง
+
+```text
+หน้าจอ  →  hooks/useData.ts  →  lib/api.ts  →  lib/db.ts (สำเนาในเครื่อง)
+                                     ↓
+                              lib/queue.ts (คิวใน IndexedDB)
+                                     ↓
+                              lib/sync.ts  ⇄  lib/net.ts  →  Worker → D1 / R2
+```
+
+| ไฟล์ | หน้าที่ |
+|---|---|
+| `src/lib/config.ts` | อ่าน `VITE_API_URL` / `VITE_AUTH_TOKEN` ตัดสินว่าอยู่โหมดไหน |
+| `src/lib/net.ts` | **จุดเดียวที่เรียก fetch** — component ห้ามเรียกเอง |
+| `src/lib/queue.ts` | คิวรอซิงก์ใน IndexedDB อยู่รอดแม้ปิดเบราว์เซอร์ |
+| `src/lib/sync.ts` | ดึงของใหม่ลง (pull) + ส่งของค้างขึ้น (push) + สถานะซิงก์ |
+| `src/components/SyncBadge.tsx` | ป้ายบอกสถานะบนหัวจอ กดเพื่อลองใหม่ได้ |
+
+**การซิงก์เกิดขึ้นเมื่อ** เปิดแอป · เน็ตกลับมา · กลับมาที่แท็บ · ทุก 1 นาทีถ้ามีของค้าง · กดที่ป้ายเอง
+
+### 5.5 พฤติกรรมตอนออฟไลน์
+
+1. กดบันทึก → เขียนลงเครื่องทันที **ไม่รอเน็ต**
+2. งานเข้าคิวใน IndexedDB
+3. ป้ายบนหัวจอขึ้น **"ออฟไลน์"** พร้อมตัวเลขจำนวนงานค้าง
+4. เน็ตกลับมา → ส่งขึ้นเซิร์ฟเวอร์ตามลำดับที่ทำไว้ → ป้ายเปลี่ยนเป็น **"ซิงก์แล้ว"**
+
+`id` ถูกสร้างที่เครื่องแล้วส่งไปด้วย เซิร์ฟเวอร์ใช้ค่าเดียวกัน จึงไม่มีปัญหา id เปลี่ยนหลังซิงก์
+และถ้าคิวยิงซ้ำ (เน็ตกะพริบ) เซิร์ฟเวอร์จะถือว่า "ซิงก์ไปแล้ว" ไม่เกิดข้อมูลซ้ำ
+
+### 5.6 ติดตั้งลงหน้าจอโฮม (PWA)
+
+เปิด <https://gemba-audit.pages.dev> บนมือถือ
+
+- **Android / Chrome** — เมนู ⋮ → "ติดตั้งแอป" หรือ "เพิ่มไปยังหน้าจอหลัก"
+- **iPhone / Safari** — ปุ่มแชร์ → "Add to Home Screen"
+
+ติดตั้งแล้วเปิดได้แม้ไม่มีสัญญาณ (service worker แคชไฟล์แอปไว้)
+และมีทางลัดไปหน้า "บันทึกการเดิน (Ad-hoc)" จากไอคอนบนหน้าจอโฮม
+
+### 5.7 รายการ endpoint
+
+```text
+GET    /api/health                          ไม่ต้องใช้โทเคน
+
+POST   /api/auth/login                      { code }
+POST   /api/auth/admin                      { code }
+GET    /api/login-history
+
+GET    /api/managers · /api/managers/:id
+POST   /api/managers · PUT /api/managers/:id
+GET    /api/areas    · POST /api/areas    · PUT /api/areas/:id
+GET    /api/themes   · POST /api/themes   · PUT /api/themes/:id
+GET    /api/settings · PUT /api/settings
+
+GET    /api/plans        ?from &to &manager_id &area_id &status &limit &offset
+POST   /api/plans · PUT /api/plans/:id · DELETE /api/plans/:id   (ลบได้เฉพาะที่ยังไม่ได้เดิน)
+
+GET    /api/records      ?from &to &manager_id &area_id &has_issue &limit &offset
+GET    /api/records/:id  (แนบประวัติการแก้ไขมาด้วย)
+POST   /api/records · PUT /api/records/:id
+
+GET    /api/issues/open                     ประเด็นค้างที่ยังไม่เปิดใบงาน เรียงจากเก่าสุด
+GET    /api/change-history ?record_id
+GET    /api/focus ?date · GET /api/focus/list · POST /api/focus · PUT /api/focus/:id
+
+POST   /api/uploads · GET /api/uploads/:key · DELETE /api/uploads/:key
+GET    /api/dashboard/summary ?from &to
+GET    /api/export/csv        ?from &to
+```
+
+**คะแนนและตัวเลขสรุปทุกตัวคำนวณที่ Worker เท่านั้น ไม่รับค่าจาก client**
 
 ---
 

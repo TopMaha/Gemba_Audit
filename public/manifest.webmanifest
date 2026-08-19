@@ -1,0 +1,32 @@
+{
+  "name": "Gemba Walk · ระบบเดินตรวจหน้างาน",
+  "short_name": "Gemba Walk",
+  "description": "วางแผน บันทึก และติดตามผลการเดินตรวจหน้างานสำหรับผู้จัดการโรงงาน ใช้งานได้แม้สัญญาณไม่ถึง",
+  "lang": "th",
+  "dir": "ltr",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#16181c",
+  "theme_color": "#16181c",
+  "categories": ["business", "productivity", "utilities"],
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    {
+      "name": "บันทึกการเดิน (Ad-hoc)",
+      "short_name": "บันทึกการเดิน",
+      "description": "เริ่มบันทึกการเดินโดยไม่ต้องมีแผนล่วงหน้า",
+      "url": "/walk/new"
+    },
+    {
+      "name": "แผนการเดิน",
+      "short_name": "แผน",
+      "url": "/plan"
+    }
+  ]
+}

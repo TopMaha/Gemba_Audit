@@ -4,9 +4,14 @@
  * ค่าที่บันทึกลงเรคคอร์ดคือคีย์รูปแบบ 'local:<id>'
  */
 
+import { apiFetchPhoto } from './net';
+
 const DB_NAME = 'gemba-photos';
 const STORE = 'photos';
 const PREFIX = 'local:';
+
+/** คีย์ที่ขึ้นต้นด้วยค่านี้คือรูปที่ยังอยู่แค่ในเครื่อง ยังไม่ได้อัปโหลดขึ้น R2 */
+export const LOCAL_PREFIX = PREFIX;
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
@@ -58,8 +63,18 @@ export async function savePhoto(file: File): Promise<string> {
 const urlCache = new Map<string, string>();
 
 export async function photoUrl(key: string): Promise<string | null> {
-  if (!key.startsWith(PREFIX)) return key; // เผื่อกรณีเป็น URL จริงจากหลังบ้าน
   if (urlCache.has(key)) return urlCache.get(key)!;
+
+  // คีย์ที่ไม่ใช่ของในเครื่อง = อยู่บน R2 ต้องดึงผ่าน API เพราะต้องแนบโทเคน
+  // (ใส่ใน <img src> ตรง ๆ ไม่ได้ เบราว์เซอร์ไม่ส่ง header ให้)
+  if (!key.startsWith(PREFIX)) {
+    const remote = await apiFetchPhoto(key);
+    if (!remote) return null;
+    const remoteUrl = URL.createObjectURL(remote);
+    urlCache.set(key, remoteUrl);
+    return remoteUrl;
+  }
+
   const db = await openDb();
   const blob = await new Promise<Blob | undefined>((resolve, reject) => {
     const tx = db.transaction(STORE, 'readonly');
@@ -71,6 +86,18 @@ export async function photoUrl(key: string): Promise<string | null> {
   const url = URL.createObjectURL(blob);
   urlCache.set(key, url);
   return url;
+}
+
+/** อ่านไฟล์รูปจากเครื่อง — ใช้ตอนซิงก์เพื่ออัปโหลดขึ้น R2 */
+export async function getPhotoBlob(key: string): Promise<Blob | null> {
+  if (!key.startsWith(PREFIX)) return null;
+  const db = await openDb();
+  return new Promise<Blob | null>((resolve) => {
+    const tx = db.transaction(STORE, 'readonly');
+    const req = tx.objectStore(STORE).get(key);
+    req.onsuccess = () => resolve((req.result as Blob | undefined) ?? null);
+    req.onerror = () => resolve(null);
+  });
 }
 
 export async function deletePhoto(key: string) {

@@ -8,6 +8,7 @@ import { useSession, useSettings } from '@/hooks/useData';
 import { endSession, setAdmin } from '@/lib/session';
 import { ACCENTS, applyTheme, getAccent, getMode, type Accent, type Mode } from '@/lib/theme';
 import { cn } from '@/lib/utils';
+import { SyncBadge } from '@/components/SyncBadge';
 
 export function BrandMark({ className }: { className?: string }) {
   return (
@@ -55,6 +56,8 @@ export function AppHeader() {
         </Link>
 
         <div className="ml-auto flex items-center gap-1.5">
+          <SyncBadge />
+
           {/* สวิตช์ภาษา */}
           <div className="flex h-8 items-center rounded-md border bg-card p-0.5">
             {(['th', 'en'] as const).map((l) => (

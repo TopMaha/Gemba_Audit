@@ -88,6 +88,16 @@ export async function exportDb(): Promise<string> {
   return JSON.stringify(read(), null, 2);
 }
 
+/**
+ * ทับสำเนาในเครื่องด้วยข้อมูลจากเซิร์ฟเวอร์ (ใช้โดย src/lib/sync.ts)
+ * เขียนทับเฉพาะตารางที่ส่งมา ตารางอื่นคงของเดิมไว้
+ */
+export function hydrate(patch: Partial<Db>) {
+  const db = read();
+  cache = { ...db, ...patch };
+  persist();
+}
+
 export async function importDb(json: string) {
   const parsed = JSON.parse(json) as Db;
   if (!parsed.managers || !parsed.areas) throw new Error('ไฟล์ข้อมูลไม่ถูกต้อง');

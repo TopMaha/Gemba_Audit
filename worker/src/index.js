@@ -28,6 +28,24 @@ import { buildCsv, buildSummary } from './lib/dashboard.js';
 
 const app = new Hono();
 
+/**
+ * id ที่ client สร้างไว้ก่อน (โหมด offline) — ถ้าส่งมาให้ใช้ค่านั้น
+ * เพื่อให้ id ในเครื่องกับบนเซิร์ฟเวอร์ตรงกัน เส้นทางอย่าง /walk/:planId จึงไม่พัง
+ * และการส่งซ้ำจากคิวจะชนคีย์ซ้ำ ซึ่งเราถือว่า "ซิงก์ไปแล้ว" ไม่ใช่ข้อผิดพลาด
+ */
+function clientId(b, prefix) {
+  if (b.id === undefined || b.id === null || b.id === '') return uid(prefix);
+  if (typeof b.id !== 'string' || !/^[A-Za-z0-9_-]{1,60}$/.test(b.id)) {
+    throw new BadInput('id', 'ต้องเป็นตัวอักษร ตัวเลข ขีดกลาง หรือขีดล่าง ไม่เกิน 60 ตัว');
+  }
+  return b.id;
+}
+
+/** สร้างซ้ำด้วย id เดิม = คิวส่งซ้ำ ให้ถือว่าสำเร็จและคืนของเดิมกลับไป */
+function isDuplicate(e) {
+  return String(e?.message ?? e).includes('UNIQUE');
+}
+
 /* ══════════════════════════════════════════════════════════════════════════
    CORS — อนุญาตเฉพาะ origin ที่ระบุใน env เท่านั้น
    ALLOWED_ORIGIN ใส่ได้หลายค่าโดยคั่นด้วยจุลภาค
@@ -459,7 +477,7 @@ app.get('/api/plans', async (c) => {
 app.post('/api/plans', async (c) => {
   const b = await readJson(c);
   const input = {
-    id: uid('plan'),
+    id: clientId(b, 'plan'),
     manager_id: str(b, 'manager_id', { max: 60 }),
     plan_date: isoDate(b, 'plan_date'),
     plan_time: hhmm(b, 'plan_time'),
@@ -483,7 +501,12 @@ app.post('/api/plans', async (c) => {
     }),
   ];
 
-  await c.env.DB.batch(stmts);
+  try {
+    await c.env.DB.batch(stmts);
+  } catch (e) {
+    // คิวออฟไลน์ส่งซ้ำด้วย id เดิม — ของอยู่ครบแล้ว ไม่ใช่ข้อผิดพลาด
+    if (!isDuplicate(e)) throw e;
+  }
 
   const saved = await c.env.DB.prepare(`${PLAN_SELECT} WHERE p.id = ?`).bind(input.id).first();
   return ok(c, mapPlan(saved), 201);
@@ -646,7 +669,7 @@ function childStmts(db, recordId, input) {
 app.post('/api/records', async (c) => {
   const b = await readJson(c);
   const input = readRecordInput(b);
-  const id = uid('rec');
+  const id = clientId(b, 'rec');
   const actor = actorName(c);
 
   const stmts = [
@@ -673,7 +696,11 @@ app.post('/api/records', async (c) => {
     );
   }
 
-  await c.env.DB.batch(stmts);
+  try {
+    await c.env.DB.batch(stmts);
+  } catch (e) {
+    if (!isDuplicate(e)) throw e;
+  }
 
   const saved = await c.env.DB.prepare(`${RECORD_SELECT} WHERE r.id = ?`).bind(id).first();
   return ok(c, mapRecord(saved), 201);

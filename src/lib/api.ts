@@ -1,4 +1,8 @@
 import { mutate, query } from './db';
+import { ONLINE_MODE } from './config';
+import { apiPost } from './net';
+import { enqueue, type QueueKind } from './queue';
+import { refreshPending, syncNow } from './sync';
 import { nowStamp, todayISO, type ISODate } from './time';
 import { uid } from './utils';
 import type {
@@ -14,9 +18,42 @@ import type {
   WeeklyFocus,
 } from './types';
 
+/**
+ * ── ชั้นข้อมูลของโดเมน ──────────────────────────────────────
+ * ทุกฟังก์ชันเขียนลง "สำเนาในเครื่อง" ก่อนเสมอ แล้วค่อยใส่คิวรอซิงก์
+ * ผู้ใช้จึงบันทึกงานได้ทันทีแม้เน็ตไม่ถึง ซึ่งเป็นเรื่องปกติในโรงงาน
+ * ส่วนการส่งขึ้นเซิร์ฟเวอร์เป็นหน้าที่ของ src/lib/sync.ts
+ *
+ * ชื่อฟังก์ชันและชนิดข้อมูลคงเดิมทุกตัว หน้าจอจึงไม่ต้องแก้อะไรเลย
+ */
+
+/**
+ * ใส่งานเข้าคิวรอซิงก์ แล้วลองส่งทันทีถ้าออนไลน์อยู่
+ *
+ * ⚠️ ห้ามโยนข้อผิดพลาดออกไปเด็ดขาด
+ * ข้อมูลถูกเขียนลงสำเนาในเครื่องเรียบร้อยแล้วก่อนถึงบรรทัดนี้
+ * ถ้าปล่อยให้ล้ม ผู้ใช้จะเห็นว่า "บันทึกไม่สำเร็จ" ทั้งที่งานถูกเก็บไว้แล้ว
+ * แล้วจะกดบันทึกซ้ำจนเกิดข้อมูลซ้ำ — แย่กว่าการซิงก์ช้าไปหนึ่งรอบ
+ */
+async function queueWrite(kind: QueueKind, localId: string, payload: unknown) {
+  if (!ONLINE_MODE) return; // โหมดในเครื่องล้วน ไม่ต้องซิงก์
+  try {
+    await enqueue({ kind, localId, payload });
+    await refreshPending();
+    void syncNow();
+  } catch (e) {
+    // เข้าคิวไม่ได้ (เช่น IndexedDB ถูกปิดหรือพื้นที่เต็ม)
+    // งานยังอยู่ในเครื่องครบ รอบซิงก์ถัดไปจะดึงของจากเซิร์ฟเวอร์มาเทียบเอง
+    console.warn('ใส่คิวรอซิงก์ไม่สำเร็จ — ข้อมูลถูกบันทึกในเครื่องแล้ว', kind, localId, e);
+  }
+}
+
 /** ── การเข้าสู่ระบบ ─────────────────────────────────────── */
 
 export async function loginManager(code: string): Promise<{ manager?: Manager; error?: 'not_found' | 'inactive' }> {
+  // ตรวจกับสำเนาในเครื่อง เพื่อให้เข้าระบบได้แม้เน็ตไม่ถึง
+  // แล้วแจ้งเซิร์ฟเวอร์แบบไม่รอผล ประวัติการเข้าระบบฝั่งเซิร์ฟเวอร์จะได้ครบ
+  if (ONLINE_MODE) void apiPost('/api/auth/login', { code: code.trim() }).catch(() => {});
   return mutate((db) => {
     const m = db.managers.find((x) => x.manager_code === code.trim());
     const log: LoginHistory = {
@@ -35,6 +72,7 @@ export async function loginManager(code: string): Promise<{ manager?: Manager; e
 }
 
 export async function loginAdmin(code: string): Promise<Superuser | null> {
+  if (ONLINE_MODE) void apiPost('/api/auth/admin', { code: code.trim() }).catch(() => {});
   return mutate((db) => {
     const su = db.superusers.find((s) => s.admin_code === code.trim()) ?? null;
     db.login_history.unshift({
@@ -64,7 +102,7 @@ export async function getManager(id: string): Promise<Manager | undefined> {
 }
 
 export async function saveManager(input: Partial<Manager> & { id?: string }, actor: string): Promise<Manager> {
-  return mutate((db) => {
+  const saved = await mutate((db) => {
     if (input.id) {
       const idx = db.managers.findIndex((m) => m.id === input.id);
       const before = db.managers[idx];
@@ -89,6 +127,19 @@ export async function saveManager(input: Partial<Manager> & { id?: string }, act
     db.change_history.unshift(entry('managers', created.id, 'create', null, created.full_name, actor));
     return created;
   });
+
+  await queueWrite('manager.save', input.id ?? `new:${saved.id}`, {
+    id: saved.id,
+    manager_code: saved.manager_code,
+    full_name: saved.full_name,
+    full_name_en: saved.full_name_en,
+    department: saved.department,
+    position: saved.position,
+    avatar_url: saved.avatar_url,
+    is_active: saved.is_active,
+    dashboard_enabled: saved.dashboard_enabled,
+  });
+  return saved;
 }
 
 export async function getAreas(): Promise<Area[]> {
@@ -96,7 +147,7 @@ export async function getAreas(): Promise<Area[]> {
 }
 
 export async function saveArea(input: Partial<Area> & { id?: string }, actor: string): Promise<Area> {
-  return mutate((db) => {
+  const saved = await mutate((db) => {
     if (input.id) {
       const idx = db.areas.findIndex((a) => a.id === input.id);
       const before = db.areas[idx];
@@ -117,6 +168,16 @@ export async function saveArea(input: Partial<Area> & { id?: string }, actor: st
     db.change_history.unshift(entry('areas', created.id, 'create', null, created.area_name, actor));
     return created;
   });
+
+  await queueWrite('area.save', input.id ?? `new:${saved.id}`, {
+    id: saved.id,
+    area_name: saved.area_name,
+    area_name_en: saved.area_name_en,
+    parent_id: saved.parent_id,
+    department: saved.department,
+    is_active: saved.is_active,
+  });
+  return saved;
 }
 
 export async function getThemes(): Promise<WalkTheme[]> {
@@ -124,7 +185,7 @@ export async function getThemes(): Promise<WalkTheme[]> {
 }
 
 export async function saveTheme(input: Partial<WalkTheme> & { id?: string }, actor: string): Promise<WalkTheme> {
-  return mutate((db) => {
+  const saved = await mutate((db) => {
     if (input.id) {
       const idx = db.walk_themes.findIndex((t) => t.id === input.id);
       const before = db.walk_themes[idx];
@@ -143,6 +204,14 @@ export async function saveTheme(input: Partial<WalkTheme> & { id?: string }, act
     db.change_history.unshift(entry('walk_themes', created.id, 'create', null, created.theme_name, actor));
     return created;
   });
+
+  await queueWrite('theme.save', input.id ?? `new:${saved.id}`, {
+    id: saved.id,
+    theme_name: saved.theme_name,
+    theme_name_en: saved.theme_name_en,
+    is_active: saved.is_active,
+  });
+  return saved;
 }
 
 export async function getSettings(): Promise<AppSettings> {
@@ -150,10 +219,13 @@ export async function getSettings(): Promise<AppSettings> {
 }
 
 export async function saveSettings(patch: Partial<AppSettings>): Promise<AppSettings> {
-  return mutate((db) => {
+  const saved = await mutate((db) => {
     db.app_settings = { ...db.app_settings, ...patch };
     return db.app_settings;
   });
+
+  await queueWrite('settings.save', 'settings', patch);
+  return saved;
 }
 
 /** ── แผนการเดิน ─────────────────────────────────────────── */
@@ -172,7 +244,7 @@ export type PlanInput = {
 };
 
 export async function createPlan(input: PlanInput, actor: string): Promise<GembaPlan> {
-  return mutate((db) => {
+  const created = await mutate((db) => {
     const created: GembaPlan = {
       id: uid('plan'),
       manager_id: input.manager_id,
@@ -189,10 +261,22 @@ export async function createPlan(input: PlanInput, actor: string): Promise<Gemba
     db.change_history.unshift(entry('gemba_plans', created.id, 'create', null, created.plan_date, actor));
     return created;
   });
+
+  // ส่ง id ที่สร้างในเครื่องไปด้วย เพื่อให้ id สองฝั่งตรงกันหลังซิงก์
+  await queueWrite('plan.create', created.id, {
+    id: created.id,
+    manager_id: created.manager_id,
+    plan_date: created.plan_date,
+    plan_time: created.plan_time,
+    area_id: created.area_id,
+    theme_ids: created.theme_ids,
+    note: created.note,
+  });
+  return created;
 }
 
 export async function updatePlan(id: string, patch: Partial<GembaPlan>, actor: string): Promise<GembaPlan> {
-  return mutate((db) => {
+  const next = await mutate((db) => {
     const idx = db.gemba_plans.findIndex((p) => p.id === id);
     const before = db.gemba_plans[idx];
     const next: GembaPlan = { ...before, ...patch };
@@ -204,6 +288,17 @@ export async function updatePlan(id: string, patch: Partial<GembaPlan>, actor: s
     logDiff(db.change_history, 'gemba_plans', id, before, next, actor);
     return next;
   });
+
+  await queueWrite('plan.update', id, {
+    manager_id: next.manager_id,
+    plan_date: next.plan_date,
+    plan_time: next.plan_time,
+    area_id: next.area_id,
+    theme_ids: next.theme_ids,
+    note: next.note,
+    status: next.status,
+  });
+  return next;
 }
 
 export async function cancelPlan(id: string, actor: string) {
@@ -234,7 +329,7 @@ export type RecordInput = {
 };
 
 export async function createRecord(input: RecordInput, actor: string): Promise<WalkRecord> {
-  return mutate((db) => {
+  const created = await mutate((db) => {
     const created: WalkRecord = {
       id: uid('rec'),
       plan_id: input.plan_id,
@@ -261,10 +356,30 @@ export async function createRecord(input: RecordInput, actor: string): Promise<W
     db.change_history.unshift(entry('gemba_walk_records', created.id, 'create', null, created.actual_date, actor));
     return created;
   });
+
+  // รูปยังเป็นคีย์ local: อยู่ ตัวซิงก์จะอัปโหลดขึ้น R2 แล้วสลับคีย์ให้เอง
+  await queueWrite('record.create', created.id, {
+    id: created.id,
+    plan_id: created.plan_id,
+    manager_id: created.manager_id,
+    actual_date: created.actual_date,
+    actual_time: created.actual_time,
+    actual_area_id: created.actual_area_id,
+    theme_ids: created.theme_ids,
+    observation: created.observation,
+    has_issue: created.has_issue,
+    issue_summary: created.issue_summary,
+    photo_urls: created.photo_urls,
+    participant_names: created.participant_names,
+    ci_required: created.ci_required,
+    ci_ticket_no: created.ci_ticket_no,
+    ci_ticket_link: created.ci_ticket_link,
+  });
+  return created;
 }
 
 export async function updateRecord(id: string, patch: Partial<WalkRecord>, actor: string): Promise<WalkRecord> {
-  return mutate((db) => {
+  const next = await mutate((db) => {
     const idx = db.gemba_walk_records.findIndex((r) => r.id === id);
     const before = db.gemba_walk_records[idx];
     const next: WalkRecord = { ...before, ...patch };
@@ -283,6 +398,12 @@ export async function updateRecord(id: string, patch: Partial<WalkRecord>, actor
     }
     return next;
   });
+
+  // ส่งเฉพาะฟิลด์ที่ผู้ใช้แก้จริง เพื่อไม่ให้ทับค่าที่คนอื่นเพิ่งแก้บนเซิร์ฟเวอร์
+  const body: Record<string, unknown> = {};
+  for (const key of Object.keys(patch)) body[key] = (next as unknown as Record<string, unknown>)[key];
+  await queueWrite('record.update', id, body);
+  return next;
 }
 
 /** ── Audit trail ────────────────────────────────────────── */
@@ -347,7 +468,7 @@ export async function getActiveFocus(date: ISODate = todayISO()): Promise<Weekly
 }
 
 export async function saveWeeklyFocus(input: Partial<WeeklyFocus> & { id?: string }): Promise<WeeklyFocus> {
-  return mutate((db) => {
+  const saved = await mutate((db) => {
     if (input.id) {
       const idx = db.weekly_focus.findIndex((f) => f.id === input.id);
       db.weekly_focus[idx] = { ...db.weekly_focus[idx], ...input } as WeeklyFocus;
@@ -365,4 +486,15 @@ export async function saveWeeklyFocus(input: Partial<WeeklyFocus> & { id?: strin
     db.weekly_focus.push(created);
     return created;
   });
+
+  await queueWrite('focus.save', input.id ?? `new:${saved.id}`, {
+    id: saved.id,
+    week_start: saved.week_start,
+    week_end: saved.week_end,
+    theme_ids: saved.theme_ids,
+    message_th: saved.message_th,
+    message_en: saved.message_en,
+    is_active: saved.is_active,
+  });
+  return saved;
 }
