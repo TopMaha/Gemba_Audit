@@ -8,7 +8,8 @@
 |---|---|---|
 | **Cloudflare Pages** (ตัวหลัก) | ✅ ใช้งานได้แล้ว | <https://gemba-audit.pages.dev> |
 | GitHub Pages (ตัวสำรอง) | ⚠️ รอเปิดสวิตช์ 1 จุด | <https://topmaha.github.io/Gemba_Audit/> |
-| D1 + R2 + Worker | ⬜ ยังไม่เริ่ม (งานที่ 3–5) | — |
+| **D1 schema + seed** | ✅ เขียนและทดสอบแล้ว | `worker/schema.sql` · `worker/seed.sql` |
+| R2 + Worker API | ⬜ ยังไม่เริ่ม (งานที่ 4–5) | — |
 
 ---
 
@@ -17,6 +18,7 @@
 - [ส่วนที่ 1 — คำสั่งที่ต้องรู้](#ส่วนที่-1--คำสั่งที่ต้องรู้)
 - [ส่วนที่ 2 — Cloudflare Pages (ตัวหลัก · deploy แล้ว)](#ส่วนที่-2--cloudflare-pages-ตัวหลัก--deploy-แล้ว-)
 - [ส่วนที่ 3 — GitHub Pages (ตัวสำรอง · ยังไม่ทำงาน)](#ส่วนที่-3--github-pages-ตัวสำรอง--ยังไม่ทำงาน-)
+- [ส่วนที่ 4 — ฐานข้อมูล D1](#ส่วนที่-4--ฐานข้อมูล-d1)
 - [ภาคผนวก ก — ทำไมของเดิมถึงพัง](#ภาคผนวก-ก--ทำไมของเดิมถึงพัง)
 
 ---
@@ -35,20 +37,47 @@
 
 ### คำสั่ง wrangler ทั้งหมดที่ต้องรันเอง
 
-ตอนนี้มีแค่ 2 คำสั่ง — ที่เหลือจะเพิ่มเมื่อทำ D1 + R2 + Worker ในงานถัดไป
+รวมไว้ที่เดียวตามลำดับ — คัดลอกทีละบล็อกได้เลย
+
+**ครั้งเดียวต่อเครื่อง**
 
 ```bash
 npx wrangler login
 ```
 
+**สร้างฐานข้อมูล D1 (ครั้งเดียวต่อโปรเจกต์)**
+
+```bash
+npx wrangler d1 create gemba-audit
+```
+
+คำสั่งนี้จะพิมพ์ `database_id` ออกมา **ต้องคัดลอกไปใส่ใน `worker/wrangler.toml`** แทนคำว่า
+`PLACEHOLDER_เปลี่ยนหลังรัน_d1_create` ก่อนทำขั้นถัดไป
+
+**สร้างตารางและใส่ข้อมูลตั้งต้น** (รันจากโฟลเดอร์ `worker/`)
+
+```bash
+cd worker && npx wrangler d1 execute gemba-audit --remote --file=./schema.sql
+```
+
+```bash
+cd worker && npx wrangler d1 execute gemba-audit --remote --file=./seed.sql
+```
+
+**ตรวจว่าข้อมูลเข้าจริง**
+
+```bash
+cd worker && npx wrangler d1 execute gemba-audit --remote --command "SELECT COUNT(*) AS n FROM managers"
+```
+
+**ดูประวัติ deploy หน้าเว็บ**
+
 ```bash
 npx wrangler pages deployment list --project-name=gemba-audit
 ```
 
-คำสั่งแรกล็อกอิน Cloudflare (ทำครั้งเดียวต่อเครื่อง) คำสั่งที่สองดูประวัติ deploy
-
-> โปรเจกต์ Pages ชื่อ `gemba-audit` ถูกสร้างไว้ให้แล้วด้วย `wrangler pages project create`
-> ไม่ต้องสร้างซ้ำ
+> โปรเจกต์ Pages ชื่อ `gemba-audit` ถูกสร้างไว้ให้แล้ว ไม่ต้องสร้างซ้ำ
+> ส่วนคำสั่งของ R2 · secret · deploy Worker จะเพิ่มเมื่อทำตัว API เสร็จ
 
 ---
 
@@ -141,6 +170,84 @@ curl -s https://topmaha.github.io/Gemba_Audit/ | grep "src/main.tsx"
 3. ไปแท็บ Actions → run ล่าสุด → **Re-run all jobs**
 
 ไม่จำเป็นต้องทำก็ได้ ถ้าใช้ Cloudflare เป็นหลักอยู่แล้ว — ปล่อยไว้เฉย ๆ ไม่กระทบอะไร
+
+---
+
+## ส่วนที่ 4 — ฐานข้อมูล D1
+
+### 4.1 ไฟล์ที่เกี่ยวข้อง
+
+| ไฟล์ | หน้าที่ |
+|---|---|
+| `worker/schema.sql` | สร้างตาราง + index ทั้งหมด (ใช้ `CREATE TABLE IF NOT EXISTS` รันซ้ำได้) |
+| `worker/seed.sql` | ข้อมูลตั้งต้น (ใช้ `INSERT OR IGNORE` รันซ้ำได้ ไม่เกิดแถวซ้ำ) |
+| `worker/wrangler.toml` | ผูก binding `DB` เข้ากับฐานข้อมูล |
+
+### 4.2 ตารางทั้งหมด 15 ตาราง
+
+โครงนี้**สะท้อนข้อมูลจริงที่แอปใช้** ไม่ใช่สคีมาระบบเช็คลิสต์ทั่วไป
+(แอปนี้ไม่มีคำถามรายข้อ ไม่มีคะแนน OK/NG — วัดผลจากพฤติกรรมการเดินแทน)
+
+| ตาราง | หน้าที่ |
+|---|---|
+| `managers` | ผู้จัดการ 12 คน — ล็อกอินด้วย `manager_code` |
+| `superusers` | ผู้ดูแลระบบ (เข้าที่ `/admin`) |
+| `areas` | พื้นที่ 26 แห่ง โครงสร้างต้นไม้ผ่าน `parent_id` |
+| `walk_themes` | หัวข้อการเดิน 8 หัวข้อ |
+| `gemba_plans` | แผนการเดิน |
+| `plan_themes` | หัวข้อของแต่ละแผน (สูงสุด 3) |
+| `gemba_walk_records` | บันทึกการเดินจริง — `plan_id` เป็น NULL ได้ = Ad-hoc |
+| `record_themes` | หัวข้อของแต่ละบันทึก |
+| `record_photos` | รูปหน้างาน เก็บ `photo_key` ที่ชี้ไปยัง R2 |
+| `record_participants` | ชื่อผู้ร่วมเดิน |
+| `change_history` | ร่องรอยการแก้ไขรายฟิลด์ |
+| `weekly_focus` + `focus_themes` | ประกาศหัวข้อประจำสัปดาห์ |
+| `login_history` | ประวัติการเข้าสู่ระบบ |
+| `app_settings` | ตั้งค่าระบบ (แถวเดียว บังคับด้วย `CHECK (id = 1)`) |
+
+### 4.3 กติกาสำคัญที่คนเขียน Worker ต้องรู้
+
+**ต้องใส่ `ORDER BY` ใน `group_concat` เสมอ**
+
+ฟิลด์อาร์เรย์อย่าง `theme_ids` ถูกแตกเป็นตารางลูก เวลาประกอบกลับต้องเรียงตาม `sort_order`
+ไม่งั้น `theme_ids[0]` จะเพี้ยน (frontend ใช้ตัวแรกเป็นหัวข้อหลัก)
+
+```sql
+-- ถูก
+SELECT group_concat(theme_id ORDER BY sort_order) FROM plan_themes WHERE plan_id = ?
+
+-- ผิด — ลำดับไม่แน่นอน
+SELECT group_concat(theme_id) FROM plan_themes WHERE plan_id = ?
+```
+
+**เวลาไทยต้อง `+7 hours` เสมอ** — D1 ทำงานบน UTC ส่วนแอปใช้ Asia/Bangkok
+
+```sql
+date('now', '+7 hours')     -- วันนี้ตามเวลาไทย
+```
+
+**พฤติกรรมตอนลบ**
+
+| ลบอะไร | เกิดอะไรขึ้น |
+|---|---|
+| ผู้จัดการที่มีบันทึกการเดิน | ❌ ถูกบล็อก (RESTRICT) — หลักฐานต้องไม่หาย ให้ใช้ `is_active = 0` แทน |
+| พื้นที่ที่มีแผน/บันทึกผูกอยู่ | ❌ ถูกบล็อก (RESTRICT) |
+| แผน | ✅ ได้ — บันทึกที่ผูกอยู่**ไม่หาย** แต่ `plan_id` กลายเป็น NULL (นับเป็น Ad-hoc) |
+| บันทึกการเดิน | ✅ ได้ — หัวข้อ/รูป/ผู้ร่วมเดินหายตาม (CASCADE) |
+
+### 4.4 ผลทดสอบ schema (รันจริงบน D1 local)
+
+| รายการ | ผล |
+|---|---|
+| `schema.sql` | ✅ สร้าง 15 ตาราง + 19 index ไม่มี error |
+| `seed.sql` | ✅ 12 ผู้จัดการ · 26 พื้นที่ · 8 หัวข้อ · 10 แผน · 5 บันทึก |
+| รัน `seed.sql` ซ้ำ | ✅ ไม่เกิดแถวซ้ำ จำนวนเท่าเดิม |
+| วันที่สัมพัทธ์ | ✅ วันนี้ 2026-08-19 (พุธ) → สัปดาห์ 08-16 ถึง 08-22 ถูกต้อง |
+| FK RESTRICT | ✅ ลบผู้จัดการ/พื้นที่ที่มีของผูกอยู่ ถูกบล็อก |
+| FK SET NULL | ✅ ลบแผนแล้วบันทึกอยู่ต่อ `plan_id` เป็น null |
+| FK CASCADE | ✅ ลบบันทึกแล้วหัวข้อ/ผู้ร่วมเดินหายตาม |
+| CHECK constraint | ✅ ใส่ `status` นอกรายการที่กำหนด ถูกบล็อก |
+| index ถูกใช้จริง | ✅ `SEARCH ... USING INDEX` ไม่ใช่ `SCAN` ทั้งตาราง |
 
 ---
 

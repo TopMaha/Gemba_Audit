@@ -1,0 +1,11 @@
+# ตั้งค่า Cloudflare Worker — ยังเป็นฉบับตั้งต้นสำหรับทดสอบ schema
+# ส่วน binding R2 / secret / route จะเพิ่มตอนเขียนตัว API
+name = "gemba-audit-api"
+main = "src/index.js"
+compatibility_date = "2025-01-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "gemba-audit"
+# database_id ได้จาก `wrangler d1 create gemba-audit` แล้วเอามาใส่ตรงนี้
+database_id = "PLACEHOLDER_เปลี่ยนหลังรัน_d1_create"
