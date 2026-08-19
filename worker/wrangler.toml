@@ -1,11 +1,26 @@
-# ตั้งค่า Cloudflare Worker — ยังเป็นฉบับตั้งต้นสำหรับทดสอบ schema
-# ส่วน binding R2 / secret / route จะเพิ่มตอนเขียนตัว API
+# ตั้งค่า Cloudflare Worker — Gemba Walk API
+#
+# ⚠️ ห้ามใส่ค่าลับในไฟล์นี้ ไฟล์นี้ถูก commit ขึ้น repo
+#    AUTH_TOKEN ต้องตั้งด้วย `wrangler secret put AUTH_TOKEN` เท่านั้น
+#    ตอนพัฒนาในเครื่องให้ใส่ไว้ที่ .dev.vars ซึ่งถูก gitignore ไว้แล้ว
+
 name = "gemba-audit-api"
 main = "src/index.js"
 compatibility_date = "2025-01-01"
 
+# ── ฐานข้อมูล D1 ──────────────────────────────────────────────────────────
 [[d1_databases]]
 binding = "DB"
 database_name = "gemba-audit"
-# database_id ได้จาก `wrangler d1 create gemba-audit` แล้วเอามาใส่ตรงนี้
-database_id = "PLACEHOLDER_เปลี่ยนหลังรัน_d1_create"
+database_id = "bb862bd5-9dce-4deb-ace5-8f384a58c208"
+
+# ── ที่เก็บรูปหน้างาน R2 ──────────────────────────────────────────────────
+[[r2_buckets]]
+binding = "PHOTOS"
+bucket_name = "gemba-photos"
+
+# ── ตัวแปรทั่วไป (ไม่ลับ) ─────────────────────────────────────────────────
+# origin ของหน้าเว็บที่อนุญาตให้เรียก API ได้ ใส่หลายค่าได้โดยคั่นด้วยจุลภาค
+# ต้องไม่มี / ต่อท้าย เพราะเบราว์เซอร์ส่ง Origin มาแบบไม่มี /
+[vars]
+ALLOWED_ORIGIN = "https://gemba-audit.pages.dev,https://topmaha.github.io,http://localhost:8080"
