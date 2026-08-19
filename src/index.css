@@ -1,0 +1,134 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Design tokens ─────────────────────────────────────────────
+   "Industrial control panel": concrete paper, graphite ink,
+   safety-amber accent, mono numerals. Light = default (ใช้กลางแดด) */
+@layer base {
+  :root {
+    --background: 40 18% 95%;
+    --foreground: 220 16% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 220 16% 11%;
+    --muted: 40 12% 90%;
+    --muted-foreground: 220 8% 40%;
+    --primary: 220 18% 14%;
+    --primary-foreground: 40 30% 97%;
+    --accent: 34 92% 47%;
+    --accent-foreground: 30 60% 8%;
+    --ok: 148 58% 32%;
+    --warn: 32 92% 44%;
+    --bad: 358 68% 47%;
+    --steel: 205 32% 38%;
+    --border: 220 12% 85%;
+    --ring: 34 92% 47%;
+    --shadow: 220 30% 20%;
+    --grid: 220 14% 88%;
+  }
+
+  .theme-steel {
+    --accent: 205 62% 40%;
+    --ring: 205 62% 40%;
+    --accent-foreground: 205 100% 97%;
+  }
+  .theme-lime {
+    --accent: 88 58% 38%;
+    --ring: 88 58% 38%;
+    --accent-foreground: 88 90% 96%;
+  }
+
+  .dark {
+    --background: 220 16% 8%;
+    --foreground: 40 16% 92%;
+    --card: 220 14% 12%;
+    --card-foreground: 40 16% 92%;
+    --muted: 220 12% 17%;
+    --muted-foreground: 220 8% 62%;
+    --primary: 40 20% 94%;
+    --primary-foreground: 220 20% 10%;
+    --ok: 148 48% 46%;
+    --warn: 32 88% 54%;
+    --bad: 358 72% 58%;
+    --steel: 205 40% 58%;
+    --border: 220 10% 22%;
+    --shadow: 220 60% 2%;
+    --grid: 220 12% 18%;
+  }
+
+  * { @apply border-border; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-feature-settings: 'cv05' 1;
+    overscroll-behavior-y: none;
+  }
+  /* พื้นหลัง: กริดกระดาษเขียนแบบ + เกรน */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    background-image: linear-gradient(hsl(var(--grid)/0.55) 1px, transparent 1px),
+      linear-gradient(90deg, hsl(var(--grid)/0.55) 1px, transparent 1px);
+    background-size: 28px 28px;
+    mask-image: radial-gradient(120% 80% at 50% 0%, #000 0%, transparent 78%);
+    opacity: 0.5;
+  }
+  ::selection { background: hsl(var(--accent)/0.28); }
+  input, textarea, select, button { font: inherit; }
+}
+
+@layer components {
+  /* แถบเตือนลายทางนิรภัย — motif หลักของแอป */
+  .hazard {
+    background-image: repeating-linear-gradient(
+      -45deg,
+      hsl(var(--accent)) 0 8px,
+      hsl(var(--primary)) 8px 16px
+    );
+  }
+  .panel {
+    @apply relative rounded-lg border bg-card shadow-panel;
+  }
+  .label-micro {
+    @apply font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground;
+  }
+  .num {
+    @apply font-mono tabular-nums tracking-tight;
+  }
+  .press {
+    @apply transition-[transform,box-shadow,background-color,border-color] duration-150 active:scale-[.985];
+  }
+  .focusable {
+    @apply outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background;
+  }
+  .scroll-x {
+    @apply overflow-x-auto [scrollbar-width:thin];
+    -webkit-overflow-scrolling: touch;
+  }
+  .stagger > * { animation: fade-up 0.42s cubic-bezier(0.2, 0.7, 0.3, 1) both; }
+  .stagger > *:nth-child(1) { animation-delay: 0.02s; }
+  .stagger > *:nth-child(2) { animation-delay: 0.06s; }
+  .stagger > *:nth-child(3) { animation-delay: 0.1s; }
+  .stagger > *:nth-child(4) { animation-delay: 0.14s; }
+  .stagger > *:nth-child(5) { animation-delay: 0.18s; }
+  .stagger > *:nth-child(6) { animation-delay: 0.22s; }
+  .stagger > *:nth-child(7) { animation-delay: 0.26s; }
+  .stagger > *:nth-child(8) { animation-delay: 0.3s; }
+}
+
+@layer utilities {
+  .pb-safe { padding-bottom: max(env(safe-area-inset-bottom), 0.5rem); }
+  .pt-safe { padding-top: env(safe-area-inset-top); }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
