@@ -8,7 +8,6 @@ import { useToast } from '@/components/ui/toast';
 import { useSession } from '@/hooks/useData';
 import { loginAdmin } from '@/lib/api';
 import { useI18n } from '@/lib/i18n';
-import { setAdmin } from '@/lib/session';
 
 export default function AdminGate() {
   const { t } = useI18n();
@@ -24,10 +23,11 @@ export default function AdminGate() {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
-    const su = await loginAdmin(code);
+    const res = await loginAdmin(code);
     setBusy(false);
-    if (!su) return setError(t('auth.adminWrong'));
-    setAdmin(true);
+    // เข้าโหมดผู้ดูแลแบบออฟไลน์ไม่ได้ เพราะโทเคนที่เป็นด่านจริงออกจากเซิร์ฟเวอร์เท่านั้น
+    if (res.error === 'offline') return setError(t('auth.adminOffline'));
+    if (!res.admin) return setError(t('auth.adminWrong'));
     toast(t('auth.adminTitle'));
     navigate('/admin/settings');
   };

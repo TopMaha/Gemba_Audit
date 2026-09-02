@@ -23,6 +23,7 @@ import {
   FOCUS_SELECT, PLAN_SELECT, RECORD_SELECT,
   mapArea, mapChange, mapFocus, mapLogin, mapManager, mapPlan, mapRecord, mapSettings, mapTheme,
 } from './lib/rows.js';
+import { createAdminSession, readAdminSession, revokeAdminSession } from './lib/admin.js';
 import { diffStmts, entryStmt } from './lib/audit.js';
 import { buildCsv, buildSummary } from './lib/dashboard.js';
 
@@ -69,7 +70,7 @@ app.use('*', async (c, next) => {
     return c.body(null, 204, {
       'Access-Control-Allow-Origin': origin,
       'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, X-Auth-Token, X-User-Code',
+      'Access-Control-Allow-Headers': 'Content-Type, X-Auth-Token, X-User-Code, X-Admin-Token',
       'Access-Control-Max-Age': '86400',
       Vary: 'Origin',
     });
@@ -123,8 +124,41 @@ app.use('/api/*', async (c, next) => {
   return next();
 });
 
-/** ชื่อผู้ทำรายการ — ไม่มีรหัสพนักงานถือว่าเป็นผู้ดูแลระบบ */
-const actorName = (c) => c.get('actor')?.name ?? 'ผู้ดูแลระบบ';
+/** ชื่อผู้ทำรายการ — รหัสพนักงานมาก่อน ถัดมาคือชื่อผู้ดูแลที่ถือเซสชันอยู่ */
+const actorName = (c) => c.get('actor')?.name ?? c.get('admin')?.admin_name ?? 'ผู้ดูแลระบบ';
+
+/* ══════════════════════════════════════════════════════════════════════════
+   ด่านผู้ดูแลระบบ — งานที่แก้ "กติกาของระบบ" ต้องมีเซสชันแอดมินเท่านั้น
+
+   ทะเบียนผู้ใช้ · พื้นที่ · หัวข้อ · ประกาศ · ตั้งค่าระบบ ล้วนเป็นของที่แก้แล้ว
+   กระทบทุกคน โดยเฉพาะ can_login ที่เป็นตัวตัดสินว่าใครเข้าระบบได้
+   ถ้าปล่อยให้ยิงได้ด้วยโทเคนรวมที่ฝังในไฟล์ JS การกำหนดสิทธิ์ก็ไม่มีความหมาย
+
+   ส่วนแผนและบันทึกการเดินไม่อยู่ในด่านนี้ เพราะเป็นงานประจำวันของผู้ใช้ทั่วไป
+   ══════════════════════════════════════════════════════════════════════════ */
+
+async function adminGuard(c, next) {
+  // อ่านอย่างเดียวไม่ต้องเป็นแอดมิน หน้าจอทั่วไปต้องใช้รายชื่อ/พื้นที่/หัวข้อด้วย
+  if (c.req.method === 'GET') return next();
+
+  const s = await readAdminSession(c);
+  if (!s) {
+    return fail(c, 'ต้องเข้าสู่ระบบผู้ดูแลก่อน หรือเซสชันหมดอายุแล้ว กรุณาเข้าใหม่ที่หน้า /admin', 403);
+  }
+  c.set('admin', s);
+  return next();
+}
+
+// ต้องประกาศก่อนตัว route ทั้งหมด Hono จึงจะเรียก middleware นี้ก่อนถึงตัวจัดการ
+for (const path of [
+  '/api/managers', '/api/managers/*',
+  '/api/areas', '/api/areas/*',
+  '/api/themes', '/api/themes/*',
+  '/api/focus', '/api/focus/*',
+  '/api/settings',
+]) {
+  app.use(path, adminGuard);
+}
 
 /* ══════════════════════════════════════════════════════════════════════════
    ตัวจับข้อผิดพลาดกลาง
@@ -202,7 +236,30 @@ app.post('/api/auth/admin', async (c) => {
     .bind(uid('log'), su?.id ?? '-', su?.full_name ?? 'admin', nowStamp(), su ? 'success' : 'failed')
     .run();
 
-  return ok(c, su ? { id: su.id, admin_code: su.admin_code, full_name: su.full_name } : null);
+  if (!su) return ok(c, null);
+
+  // โทเคนนี้คือด่านจริง หน้าเว็บเก็บไว้แนบมากับทุกคำสั่งที่เป็นงานแอดมิน
+  const session = await createAdminSession(c.env.DB, su);
+  return ok(c, {
+    id: su.id,
+    admin_code: su.admin_code,
+    full_name: su.full_name,
+    token: session.token,
+    expires_at: session.expires_at,
+  });
+});
+
+/** ตรวจว่าโทเคนที่ถืออยู่ยังใช้ได้ — หน้าเว็บเรียกตอนเปิดหน้าตั้งค่า */
+app.get('/api/auth/admin/session', async (c) => {
+  const s = await readAdminSession(c);
+  if (!s) return fail(c, 'เซสชันผู้ดูแลหมดอายุหรือไม่ถูกต้อง', 403);
+  return ok(c, { admin_id: s.admin_id, full_name: s.admin_name, expires_at: s.expires_at });
+});
+
+/** ออกจากโหมดผู้ดูแล — ลบเซสชันทิ้งทันที ไม่ปล่อยให้ค้างจนหมดอายุเอง */
+app.post('/api/auth/admin/logout', async (c) => {
+  await revokeAdminSession(c);
+  return ok(c, { ok: true });
 });
 
 app.get('/api/login-history', async (c) => {

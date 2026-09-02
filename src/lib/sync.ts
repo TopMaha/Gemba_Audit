@@ -175,9 +175,12 @@ async function pushAll(): Promise<{ sent: number; dropped: number }> {
       sent++;
     } catch (e) {
       const err = e as ApiError;
-      if (err.isOffline || err.status >= 500) {
+      // 401/403 = สิทธิ์ยังไม่พร้อม (เช่นเซสชันผู้ดูแลหมดอายุระหว่างที่งานค้างคิว)
+      // ไม่ใช่ข้อมูลผิด ห้ามทิ้ง ไม่งั้นงานที่ผู้ใช้เห็นว่าบันทึกแล้วจะหายเงียบ ๆ
+      // แล้วโดน pull() รอบถัดไปทับกลับเป็นค่าเก่า เก็บไว้รอจนกว่าจะเข้าสู่ระบบใหม่
+      if (err.isOffline || err.status >= 500 || err.status === 401 || err.status === 403) {
         await markFailed(item, err.message);
-        throw err; // เน็ตหรือเซิร์ฟเวอร์มีปัญหา หยุดทั้งรอบ
+        throw err; // เน็ต สิทธิ์ หรือเซิร์ฟเวอร์มีปัญหา หยุดทั้งรอบ
       }
       // ข้อมูลชิ้นนี้เซิร์ฟเวอร์ไม่รับ — ทิ้งไปเพื่อไม่ให้ขวางคิว
       console.warn('ทิ้งงานที่ซิงก์ไม่ได้', item.kind, item.localId, err.message);

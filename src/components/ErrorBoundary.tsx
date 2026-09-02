@@ -15,10 +15,19 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, { error: E
     console.error('[Gemba] render error:', error, info.componentStack);
   }
 
+  /**
+   * ทางออกสุดท้ายเมื่อหน้าจอเปิดไม่ขึ้น — ล้างสำเนาในเครื่องแล้วเริ่มใหม่
+   *
+   * กวาดทุกคีย์ที่ขึ้นต้นด้วย gemba. แทนการไล่ลบทีละชื่อ เพราะเวอร์ชันของสำเนา
+   * ในเครื่องเปลี่ยนได้เรื่อย ๆ (v1 → v2 → v3) ถ้าไล่ลบทีละชื่อแล้วลืมแก้ตาม
+   * ปุ่มนี้จะไม่ล้างอะไรเลย แล้วผู้ใช้จะค้างอยู่กับหน้าจอที่พังตลอดไป
+   *
+   * ข้อมูลบนเซิร์ฟเวอร์ไม่ได้หายไปด้วย รอบซิงก์ถัดไปดึงกลับมาครบ
+   */
   reset = () => {
-    localStorage.removeItem('gemba.db.v1');
-    localStorage.removeItem('gemba.session');
-    localStorage.removeItem('gemba.admin');
+    for (const key of Object.keys(localStorage)) {
+      if (key.startsWith('gemba.')) localStorage.removeItem(key);
+    }
     location.reload();
   };
 

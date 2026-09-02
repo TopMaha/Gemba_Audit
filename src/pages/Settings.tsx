@@ -11,6 +11,7 @@ import { Field, Input, Select, Textarea } from '@/components/ui/field';
 import { Avatar, SkeletonList, SwitchRow, Switch, Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/misc';
 import { useToast } from '@/components/ui/toast';
 import {
+  useAdminGuard,
   useAreas,
   useCoreData,
   useFocusList,
@@ -35,6 +36,9 @@ import { cn } from '@/lib/utils';
 export default function Settings() {
   const { t } = useI18n();
   const { admin } = useSession();
+  // ต้องเรียกก่อนบรรทัดที่ return ออกไป ไม่งั้นผิดกฎลำดับ hook
+  // ถ้าเซิร์ฟเวอร์ปฏิเสธโทเคน ตัว hook จะล้างเซสชันทิ้ง แล้วบรรทัดล่างเด้งกลับหน้า /admin เอง
+  useAdminGuard();
   if (!admin) return <Navigate to="/admin" replace />;
 
   return (

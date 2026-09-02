@@ -1,8 +1,9 @@
 import { mutate, query } from './db';
 import { ONLINE_MODE } from './config';
-import { apiPost } from './net';
+import { ApiError, apiGet, apiPost } from './net';
 import { enqueue, type QueueKind } from './queue';
 import { refreshPending, syncNow } from './sync';
+import { endAdminSession, getAdminSession, startAdminSession } from './session';
 import { nowStamp, todayISO, type ISODate } from './time';
 import { normalizeCode, uid } from './utils';
 import type {
@@ -79,21 +80,99 @@ export async function loginManager(code: string): Promise<{ manager?: Manager; e
   });
 }
 
-export async function loginAdmin(code: string): Promise<Superuser | null> {
-  if (ONLINE_MODE) void apiPost('/api/auth/admin', { code: code.trim() }).catch(() => {});
+export type AdminLoginError = 'wrong_code' | 'offline';
+
+/** คำตอบจาก POST /api/auth/admin เมื่อรหัสถูก */
+interface AdminLoginPayload extends Superuser {
+  token: string;
+  expires_at: string;
+}
+
+/**
+ * เข้าโหมดผู้ดูแลระบบ
+ *
+ * ต่างจากการล็อกอินของผู้ใช้ทั่วไปตรงที่ "ต้องออนไลน์" เพราะโทเคนที่เป็นด่านจริง
+ * ออกได้จากเซิร์ฟเวอร์เท่านั้น ถ้ายอมให้เข้าแบบออฟไลน์ก็จะกลับไปเป็นด่านปลอม
+ * แบบเดิมที่ตั้งค่าใน localStorage เองได้ — และงานแอดมินไม่ใช่งานหน้างานที่ต้อง
+ * ทำกลางโรงงานตอนเน็ตไม่ถึงอยู่แล้ว
+ */
+export async function loginAdmin(code: string): Promise<{ admin?: Superuser; error?: AdminLoginError }> {
   const wanted = normalizeCode(code);
-  return mutate((db) => {
-    const su = db.superusers.find((s) => normalizeCode(s.admin_code) === wanted) ?? null;
-    db.login_history.unshift({
-      id: uid('log'),
-      actor_id: su?.id ?? '-',
-      actor_name: su?.full_name ?? 'admin',
-      role: 'admin',
-      at: nowStamp(),
-      result: su ? 'success' : 'failed',
+
+  // โหมดในเครื่องล้วน (ยังไม่ได้ตั้ง VITE_API_URL) — ไม่มีเซิร์ฟเวอร์ให้ถาม
+  if (!ONLINE_MODE) {
+    const su = await mutate((db) => {
+      const found = db.superusers.find((s) => normalizeCode(s.admin_code) === wanted) ?? null;
+      db.login_history.unshift(adminLogEntry(found));
+      return found;
     });
-    return su;
+    if (!su) return { error: 'wrong_code' };
+    startAdminSession({ admin_id: su.id, full_name: su.full_name, token: 'local', expires_at: FAR_FUTURE });
+    return { admin: su };
+  }
+
+  let payload: AdminLoginPayload | null;
+  try {
+    payload = await apiPost<AdminLoginPayload | null>('/api/auth/admin', { code: code.trim() });
+  } catch (e) {
+    if ((e as ApiError).isOffline) return { error: 'offline' };
+    throw e;
+  }
+
+  await mutate((db) => {
+    db.login_history.unshift(adminLogEntry(payload));
   });
+
+  if (!payload) return { error: 'wrong_code' };
+
+  startAdminSession({
+    admin_id: payload.id,
+    full_name: payload.full_name,
+    token: payload.token,
+    expires_at: payload.expires_at,
+  });
+  return { admin: { id: payload.id, admin_code: payload.admin_code, full_name: payload.full_name } };
+}
+
+/** ออกจากโหมดผู้ดูแล — บอกเซิร์ฟเวอร์ให้ลบเซสชันทิ้งด้วย ไม่ปล่อยค้างจนหมดอายุ */
+export async function logoutAdmin(): Promise<void> {
+  if (ONLINE_MODE && getAdminSession()?.token) {
+    await apiPost('/api/auth/admin/logout').catch(() => {});
+  }
+  endAdminSession();
+}
+
+/**
+ * ถามเซิร์ฟเวอร์ว่าโทเคนที่ถืออยู่ยังใช้ได้ไหม
+ *
+ * คืน false เฉพาะตอนที่เซิร์ฟเวอร์ปฏิเสธจริง ๆ เท่านั้น
+ * ต่อเน็ตไม่ได้ให้ถือว่ายังใช้ได้ ไม่งั้นแค่สัญญาณหลุดก็เด้งแอดมินออกทั้งที่ยังมีสิทธิ์
+ */
+export async function verifyAdminSession(): Promise<boolean> {
+  if (!ONLINE_MODE || !getAdminSession()) return true;
+  try {
+    await apiGet('/api/auth/admin/session');
+    return true;
+  } catch (e) {
+    const err = e as ApiError;
+    if (err.isOffline || err.status >= 500) return true;
+    endAdminSession();
+    return false;
+  }
+}
+
+/** วันหมดอายุของเซสชันโหมดในเครื่อง — ไม่มีเซิร์ฟเวอร์ให้หมดอายุกับใคร */
+const FAR_FUTURE = '9999-12-31T00:00:00.000Z';
+
+function adminLogEntry(su: { id: string; full_name: string } | null): LoginHistory {
+  return {
+    id: uid('log'),
+    actor_id: su?.id ?? '-',
+    actor_name: su?.full_name ?? 'admin',
+    role: 'admin',
+    at: nowStamp(),
+    result: su ? 'success' : 'failed',
+  };
 }
 
 export async function getLoginHistory(): Promise<LoginHistory[]> {

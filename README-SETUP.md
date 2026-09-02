@@ -185,7 +185,7 @@ curl -s https://topmaha.github.io/Gemba_Audit/ | grep "src/main.tsx"
 | `worker/seed.sql` | ข้อมูลตั้งต้น (ใช้ `INSERT OR IGNORE` รันซ้ำได้ ไม่เกิดแถวซ้ำ) |
 | `worker/wrangler.toml` | ผูก binding `DB` เข้ากับฐานข้อมูล |
 
-### 4.2 ตารางทั้งหมด 15 ตาราง
+### 4.2 ตารางทั้งหมด 16 ตาราง
 
 โครงนี้**สะท้อนข้อมูลจริงที่แอปใช้** ไม่ใช่สคีมาระบบเช็คลิสต์ทั่วไป
 (แอปนี้ไม่มีคำถามรายข้อ ไม่มีคะแนน OK/NG — วัดผลจากพฤติกรรมการเดินแทน)
@@ -194,6 +194,7 @@ curl -s https://topmaha.github.io/Gemba_Audit/ | grep "src/main.tsx"
 |---|---|
 | `managers` | ทะเบียนพนักงาน 393 คน — ล็อกอินด้วย `manager_code` ได้เฉพาะคนที่ `can_login = 1` (63 คน) ที่เหลืออยู่ในทะเบียนเพื่อเลือกเป็นผู้ร่วมเดิน |
 | `superusers` | ผู้ดูแลระบบ (เข้าที่ `/admin`) |
+| `admin_sessions` | เซสชันผู้ดูแลที่ยังใช้ได้ — เก็บแฟ้มแฮชของโทเคน เป็นด่านจริงของงานแอดมิน |
 | `areas` | พื้นที่ 20 แห่ง โครงสร้างต้นไม้ผ่าน `parent_id` |
 | `walk_themes` | หัวข้อการเดิน 8 หัวข้อ |
 | `gemba_plans` | แผนการเดิน |
@@ -379,7 +380,9 @@ curl -s -H "X-Auth-Token: <โทเคนของคุณ>" "https://gemba-au
 GET    /api/health                          ไม่ต้องใช้โทเคน
 
 POST   /api/auth/login                      { code }
-POST   /api/auth/admin                      { code }
+POST   /api/auth/admin                      { code } → คืนโทเคนผู้ดูแล
+GET    /api/auth/admin/session              ตรวจว่าโทเคนยังใช้ได้
+POST   /api/auth/admin/logout               ลบเซสชันผู้ดูแลทิ้ง
 GET    /api/login-history
 
 GET    /api/managers · /api/managers/:id

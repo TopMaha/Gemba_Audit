@@ -3,7 +3,21 @@ import type { Manager } from './types';
 /** เซสชันผู้ใช้ เก็บใน localStorage — คงอยู่หลังรีเฟรช/เปลี่ยนหน้า */
 
 const KEY = 'gemba.session';
-const ADMIN_KEY = 'gemba.admin';
+
+/**
+ * เซสชันผู้ดูแลระบบ
+ *
+ * ของเดิมเก็บแค่ธง '1' ซึ่งใครก็ตั้งเองใน devtools ได้ แล้วเข้าหน้าตั้งค่า
+ * ไปเปิดสิทธิ์ให้ตัวเองได้ทั้งที่ไม่รู้รหัสผู้ดูแล ตอนนี้เก็บโทเคนที่เซิร์ฟเวอร์ออกให้แทน
+ *
+ * ⚠️ ค่าที่เก็บตรงนี้ไม่ใช่ด่านกัน — ปลอมได้เหมือนเดิมทุกประการ
+ *    มันมีหน้าที่แค่ตัดสินว่าจะโชว์เมนูผู้ดูแลไหม ด่านจริงอยู่ที่ Worker
+ *    ซึ่งตรวจโทเคนกับตาราง admin_sessions ทุกครั้งที่มีการเขียนงานแอดมิน
+ */
+const ADMIN_KEY = 'gemba.admin.session';
+
+/** ธงชุดเก่าที่เคยใช้เป็นด่าน — ล้างทิ้งเพื่อไม่ให้เหลือค้างชวนเข้าใจผิด */
+const LEGACY_ADMIN_KEY = 'gemba.admin';
 
 export interface Session {
   manager_id: string;
@@ -81,13 +95,47 @@ export function endSession() {
   emit();
 }
 
-export function isAdmin(): boolean {
-  return localStorage.getItem(ADMIN_KEY) === '1';
+export interface AdminSession {
+  admin_id: string;
+  full_name: string;
+  /** โทเคนที่ต้องแนบไปกับทุกคำสั่งที่เป็นงานแอดมิน — Worker เป็นคนตรวจ */
+  token: string;
+  expires_at: string;
 }
 
-export function setAdmin(on: boolean) {
-  if (on) localStorage.setItem(ADMIN_KEY, '1');
-  else localStorage.removeItem(ADMIN_KEY);
+let cachedAdminRaw: string | null = null;
+let cachedAdmin: AdminSession | null = null;
+
+export function getAdminSession(): AdminSession | null {
+  const raw = localStorage.getItem(ADMIN_KEY);
+  if (raw === cachedAdminRaw) return cachedAdmin;
+  cachedAdminRaw = raw;
+  try {
+    cachedAdmin = raw ? (JSON.parse(raw) as AdminSession) : null;
+  } catch {
+    cachedAdmin = null;
+  }
+  return cachedAdmin;
+}
+
+/**
+ * ใช้ตัดสินว่าจะแสดงหน้าจอผู้ดูแลไหมเท่านั้น ไม่ใช่ด่านกัน
+ * เทียบวันหมดอายุแบบสตริงได้ เพราะ ISO 8601 แบบ UTC เรียงตามตัวอักษรตรงกับตามเวลา
+ */
+export function isAdmin(): boolean {
+  const s = getAdminSession();
+  return Boolean(s?.token) && s!.expires_at > new Date().toISOString();
+}
+
+export function startAdminSession(s: AdminSession) {
+  localStorage.removeItem(LEGACY_ADMIN_KEY);
+  localStorage.setItem(ADMIN_KEY, JSON.stringify(s));
+  emit();
+}
+
+export function endAdminSession() {
+  localStorage.removeItem(LEGACY_ADMIN_KEY);
+  localStorage.removeItem(ADMIN_KEY);
   emit();
 }
 

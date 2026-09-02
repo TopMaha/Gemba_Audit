@@ -49,6 +49,25 @@ CREATE TABLE IF NOT EXISTS superusers (
   full_name   TEXT NOT NULL
 );
 
+-- เซสชันผู้ดูแลระบบ — เป็นด่านจริงของหน้า /admin
+--
+-- ค่าใน localStorage ฝั่งเบราว์เซอร์ปลอมได้ ถ้าใช้แค่นั้นเป็นด่าน ใครก็ตั้งเองแล้ว
+-- เข้าไปเปิดสิทธิ์ can_login ให้ตัวเองได้ การเขียนที่เป็นงานแอดมินจึงต้องแนบโทเคน
+-- จากตารางนี้เสมอ และ Worker เป็นคนตรวจ ไม่ใช่หน้าเว็บ
+--
+-- เก็บเฉพาะค่าแฮช SHA-256 ของโทเคน ตัวโทเคนจริงส่งกลับไปครั้งเดียวตอนล็อกอิน
+-- ฐานข้อมูลหลุดก็แปลงกลับเป็นโทเคนที่ใช้ได้ไม่ได้
+CREATE TABLE IF NOT EXISTS admin_sessions (
+  token_hash  TEXT PRIMARY KEY,
+  admin_id    TEXT NOT NULL,
+  admin_name  TEXT NOT NULL,
+  created_at  TEXT NOT NULL,
+  expires_at  TEXT NOT NULL
+);
+
+-- ใช้ตอนเก็บกวาดเซสชันหมดอายุ
+CREATE INDEX IF NOT EXISTS idx_admin_sessions_expires ON admin_sessions (expires_at);
+
 
 -- ── พื้นที่ (โครงสร้างต้นไม้) ─────────────────────────────────────────────
 -- parent_id ชี้ไปยังพื้นที่แม่ · ระดับบนสุดมีค่าเป็น NULL

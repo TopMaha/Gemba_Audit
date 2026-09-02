@@ -65,6 +65,7 @@ export const en: Dict = {
     adminTitle: 'Administrator mode',
     adminCode: 'Admin code',
     adminWrong: 'Invalid admin code',
+    adminOffline: 'Admin mode needs a connection — admin rights are issued by the server only.',
     welcome: 'Welcome',
   },
   nav: {

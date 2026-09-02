@@ -5,7 +5,8 @@ import { Avatar, Popover, PopoverContent, PopoverTrigger } from '@/components/ui
 import { Button } from '@/components/ui/button';
 import { useI18n, managerLabel } from '@/lib/i18n';
 import { useSession, useSettings } from '@/hooks/useData';
-import { endSession, setAdmin } from '@/lib/session';
+import { logoutAdmin } from '@/lib/api';
+import { endSession } from '@/lib/session';
 import { ACCENTS, applyTheme, getAccent, getMode, type Accent, type Mode } from '@/lib/theme';
 import { cn } from '@/lib/utils';
 import { SyncBadge } from '@/components/SyncBadge';
@@ -36,9 +37,10 @@ export function AppHeader() {
     applyTheme(accent, next);
   };
 
-  const signOut = () => {
+  const signOut = async () => {
     endSession();
-    setAdmin(false);
+    // ลบเซสชันแอดมินที่ฝั่งเซิร์ฟเวอร์ด้วย ไม่ปล่อยให้โทเคนใช้ได้ต่อจนหมดอายุเอง
+    await logoutAdmin();
     navigate('/');
   };
 

@@ -6,7 +6,7 @@
  */
 
 import { API_URL, AUTH_TOKEN, ONLINE_MODE } from './config';
-import { getSession } from './session';
+import { getAdminSession, getSession } from './session';
 
 /** ข้อผิดพลาดจากฝั่ง API — มีสถานะ HTTP ติดมาด้วยเพื่อแยกแยะปลายทาง */
 export class ApiError extends Error {
@@ -30,6 +30,10 @@ function headers(extra?: HeadersInit): HeadersInit {
   // ผูกผู้ทำรายการ เพื่อให้ประวัติการแก้ไขบันทึกชื่อคนได้ถูก
   const code = getSession()?.manager_code;
   if (code) h['X-User-Code'] = code;
+  // งานแอดมิน (ทะเบียนผู้ใช้ · พื้นที่ · หัวข้อ · ประกาศ · ตั้งค่า) ต้องมีโทเคนนี้
+  // เส้นทางอื่นไม่สนใจว่ามีหรือไม่มี ส่งไปด้วยเสมอจึงไม่มีผลเสีย
+  const adminToken = getAdminSession()?.token;
+  if (adminToken) h['X-Admin-Token'] = adminToken;
   return h;
 }
 
