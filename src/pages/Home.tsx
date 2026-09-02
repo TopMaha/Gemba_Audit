@@ -31,6 +31,7 @@ export default function Home() {
     setBusy(false);
     if (res.error === 'not_found') return setError(t('auth.wrongCode'));
     if (res.error === 'inactive') return setError(t('auth.inactive'));
+    if (res.error === 'no_access') return setError(t('auth.noAccess'));
     if (res.manager) {
       startSession(res.manager);
       toast(`${t('auth.welcome')} ${res.manager.full_name}`);
@@ -105,27 +106,21 @@ export default function Home() {
             <Input
               autoFocus
               value={code}
-              inputMode="numeric"
-              pattern="[0-9]*"
+              // รหัสพนักงานมีทั้งตัวอักษรและขีดกลาง (T-815 · PST742) จึงเป็นแป้นตัวอักษร
+              autoCapitalize="characters"
+              autoCorrect="off"
+              spellCheck={false}
               placeholder={t('auth.codePlaceholder')}
               onChange={(e) => (setCode(e.target.value), setError(null))}
-              className="num h-14 text-center text-2xl font-semibold tracking-[0.3em]"
+              className="num h-14 text-center text-2xl font-semibold uppercase tracking-[0.18em]"
             />
             {error ? <p className="mt-2 text-[12px] text-bad">{error}</p> : null}
+            <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">{t('auth.codeHint')}</p>
 
             <Button type="submit" variant="accent" size="lg" className="mt-4 w-full" disabled={busy || !code}>
               {busy ? t('common.loading') : t('auth.signIn')}
               <ArrowRight className="h-4 w-4" />
             </Button>
-
-            <div className="mt-5 rounded-md border border-dashed bg-muted/40 px-3 py-2.5">
-              <div className="label-micro mb-1">{t('auth.demoTitle')}</div>
-              <p className="num text-[11px] leading-relaxed text-muted-foreground">
-                {t('auth.demoManager')}
-                <br />
-                {t('auth.demoAdmin')}
-              </p>
-            </div>
 
             <Link
               to="/admin"
@@ -140,7 +135,7 @@ export default function Home() {
 
       <footer className="border-t px-4 py-4 text-center">
         <p className="num text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
-          {settings?.company_name ?? 'Calue'} · Gemba Walk MVP v1.0
+          {settings?.company_name ?? 'TENNECO'} · Gemba Walk
         </p>
       </footer>
     </div>

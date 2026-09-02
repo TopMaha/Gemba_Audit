@@ -16,7 +16,7 @@
 import { Hono } from 'hono';
 
 import {
-  BadInput, bool, fail, hhmm, int, isoDate, nowStamp, ok,
+  BadInput, bool, fail, hhmm, int, isoDate, normalizeCode, normalizedSql, nowStamp, ok,
   oneOf, qDate, qInt, readJson, str, strArray, todayBangkok, uid,
 } from './lib/http.js';
 import {
@@ -109,12 +109,14 @@ app.use('/api/*', async (c, next) => {
   }
 
   // ผูกผู้ใช้จากรหัสพนักงาน (ถ้าส่งมา) ไว้ใช้เป็นชื่อผู้แก้ไขในประวัติ
+  // ต้องมีสิทธิ์เข้าใช้งานอยู่จริง ไม่งั้นรหัสที่ถูกถอนสิทธิ์ไปแล้วจะยังลงชื่อในประวัติได้
   const code = c.req.header('X-User-Code');
   if (code) {
     const m = await c.env.DB.prepare(
-      `SELECT id, full_name FROM managers WHERE manager_code = ? AND is_active = 1`,
+      `SELECT id, full_name FROM managers
+        WHERE ${normalizedSql('manager_code')} = ? AND is_active = 1 AND can_login = 1`,
     )
-      .bind(code.trim())
+      .bind(normalizeCode(code))
       .first();
     if (m) c.set('actor', { id: m.id, name: m.full_name });
   }
@@ -167,16 +169,22 @@ app.post('/api/auth/login', async (c) => {
   const body = await readJson(c);
   const code = str(body, 'code', { max: 40 });
 
-  const m = await c.env.DB.prepare(`SELECT * FROM managers WHERE manager_code = ?`).bind(code).first();
+  const m = await c.env.DB.prepare(`SELECT * FROM managers WHERE ${normalizedSql('manager_code')} = ?`)
+    .bind(normalizeCode(code))
+    .first();
+
+  // เข้าได้ต้องครบสามอย่าง: มีรหัสนี้จริง · ยังเป็นพนักงานอยู่ · ได้รับสิทธิ์ใช้แอป
+  const granted = Boolean(m) && m.is_active === 1 && m.can_login === 1;
 
   await c.env.DB.prepare(
     `INSERT INTO login_history (id, actor_id, actor_name, role, at, result) VALUES (?, ?, ?, 'manager', ?, ?)`,
   )
-    .bind(uid('log'), m?.id ?? '-', m?.full_name ?? code, nowStamp(), m && m.is_active === 1 ? 'success' : 'failed')
+    .bind(uid('log'), m?.id ?? '-', m?.full_name ?? code, nowStamp(), granted ? 'success' : 'failed')
     .run();
 
   if (!m) return ok(c, { error: 'not_found' });
   if (m.is_active !== 1) return ok(c, { error: 'inactive' });
+  if (m.can_login !== 1) return ok(c, { error: 'no_access' });
   return ok(c, { manager: mapManager(m) });
 });
 
@@ -184,7 +192,9 @@ app.post('/api/auth/admin', async (c) => {
   const body = await readJson(c);
   const code = str(body, 'code', { max: 40 });
 
-  const su = await c.env.DB.prepare(`SELECT * FROM superusers WHERE admin_code = ?`).bind(code).first();
+  const su = await c.env.DB.prepare(`SELECT * FROM superusers WHERE ${normalizedSql('admin_code')} = ?`)
+    .bind(normalizeCode(code))
+    .first();
 
   await c.env.DB.prepare(
     `INSERT INTO login_history (id, actor_id, actor_name, role, at, result) VALUES (?, ?, ?, 'admin', ?, ?)`,
@@ -229,17 +239,19 @@ app.post('/api/managers', async (c) => {
     avatar_url: str(b, 'avatar_url', { required: false, max: 1000, fallback: null }),
     is_active: bool(b, 'is_active', { fallback: true }) ? 1 : 0,
     dashboard_enabled: bool(b, 'dashboard_enabled', { fallback: true }) ? 1 : 0,
+    // คนที่เพิ่มใหม่ยังล็อกอินไม่ได้จนกว่าผู้ดูแลระบบจะเปิดสิทธิ์ให้
+    can_login: bool(b, 'can_login', { fallback: false }) ? 1 : 0,
     created_at: nowStamp(),
   };
 
   await c.env.DB.batch([
     c.env.DB.prepare(
       `INSERT INTO managers (id, manager_code, full_name, full_name_en, department, position,
-                             avatar_url, is_active, dashboard_enabled, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                             avatar_url, is_active, dashboard_enabled, can_login, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).bind(
       row.id, row.manager_code, row.full_name, row.full_name_en, row.department,
-      row.position, row.avatar_url, row.is_active, row.dashboard_enabled, row.created_at,
+      row.position, row.avatar_url, row.is_active, row.dashboard_enabled, row.can_login, row.created_at,
     ),
     entryStmt(c.env.DB, {
       table: 'managers', recordId: row.id, action: 'create',
@@ -266,16 +278,18 @@ app.put('/api/managers/:id', async (c) => {
     avatar_url: 'avatar_url' in b ? str(b, 'avatar_url', { required: false, max: 1000, fallback: null }) : before.avatar_url,
     is_active: 'is_active' in b ? (bool(b, 'is_active') ? 1 : 0) : before.is_active,
     dashboard_enabled: 'dashboard_enabled' in b ? (bool(b, 'dashboard_enabled') ? 1 : 0) : before.dashboard_enabled,
+    can_login: 'can_login' in b ? (bool(b, 'can_login') ? 1 : 0) : before.can_login,
   };
 
   await c.env.DB.batch([
     c.env.DB.prepare(
       `UPDATE managers SET manager_code = ?, full_name = ?, full_name_en = ?, department = ?,
-                           position = ?, avatar_url = ?, is_active = ?, dashboard_enabled = ?
+                           position = ?, avatar_url = ?, is_active = ?, dashboard_enabled = ?,
+                           can_login = ?
         WHERE id = ?`,
     ).bind(
       next.manager_code, next.full_name, next.full_name_en, next.department,
-      next.position, next.avatar_url, next.is_active, next.dashboard_enabled, id,
+      next.position, next.avatar_url, next.is_active, next.dashboard_enabled, next.can_login, id,
     ),
     ...diffStmts(c.env.DB, { table: 'managers', recordId: id, before, after: next, actor: actorName(c) }),
   ]);

@@ -70,10 +70,19 @@ function UsersTab() {
   const [editing, setEditing] = useState<Manager | null>(null);
   const [open, setOpen] = useState(false);
   const [term, setTerm] = useState('');
+  // ทะเบียนมีเกือบสี่ร้อยคนแต่เปิดสิทธิ์ไว้ไม่ถึงหนึ่งในหก
+  // ถ้าไม่มีตัวกรองนี้ ผู้ดูแลจะหา "ใครเข้าได้บ้าง" ไม่เจอในกองรายชื่อ
+  const [access, setAccess] = useState<'all' | 'yes' | 'no'>('all');
 
-  const rows = managers.filter((m) =>
-    `${m.manager_code} ${m.full_name} ${m.full_name_en ?? ''} ${m.department}`.toLowerCase().includes(term.toLowerCase()),
-  );
+  const rows = managers.filter((m) => {
+    if (access === 'yes' && !m.can_login) return false;
+    if (access === 'no' && m.can_login) return false;
+    return `${m.manager_code} ${m.full_name} ${m.full_name_en ?? ''} ${m.department}`
+      .toLowerCase()
+      .includes(term.toLowerCase());
+  });
+
+  const granted = managers.filter((m) => m.can_login).length;
 
   const quickToggle = async (m: Manager, patch: Partial<Manager>) => {
     await saveManager.mutateAsync({ id: m.id, ...patch });
@@ -89,6 +98,30 @@ function UsersTab() {
         </Button>
       </div>
 
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex h-9 items-center rounded-md border bg-card p-0.5">
+          {([
+            ['all', t('admin.filterAll')],
+            ['yes', t('admin.filterCanLogin')],
+            ['no', t('admin.filterNoLogin')],
+          ] as const).map(([value, label]) => (
+            <button
+              key={value}
+              onClick={() => setAccess(value)}
+              className={cn(
+                'press focusable h-8 rounded-[4px] px-3 text-[12px] font-medium',
+                access === value ? 'bg-primary text-primary-foreground' : 'text-muted-foreground',
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <p className="num text-[11px] text-muted-foreground">
+          {t('admin.accessCount', { n: granted, total: managers.length })}
+        </p>
+      </div>
+
       {isLoading ? (
         <SkeletonList rows={5} />
       ) : (
@@ -101,6 +134,7 @@ function UsersTab() {
                   <div className="flex items-center gap-2">
                     <span className="truncate text-[14px] font-medium">{managerLabel(m, lang)}</span>
                     {!m.is_active ? <Badge tone="bad">{t('common.inactive')}</Badge> : null}
+                    {m.is_active && !m.can_login ? <Badge>{t('admin.noLoginBadge')}</Badge> : null}
                   </div>
                   <div className="num text-[11px] text-muted-foreground">
                     {m.manager_code} · {m.department}
@@ -111,7 +145,11 @@ function UsersTab() {
                   <Pencil className="h-4 w-4" />
                 </Button>
               </div>
-              <div className="mt-2 grid grid-cols-2 gap-3 border-t pt-2">
+              <div className="mt-2 grid gap-2 border-t pt-2 sm:grid-cols-3 sm:gap-3">
+                <label className="flex items-center justify-between gap-2">
+                  <span className="text-[12px] font-medium">{t('admin.loginAccess')}</span>
+                  <Switch checked={m.can_login} onCheckedChange={(v) => quickToggle(m, { can_login: v })} />
+                </label>
                 <label className="flex items-center justify-between gap-2">
                   <span className="text-[12px]">{t('admin.activeUser')}</span>
                   <Switch checked={m.is_active} onCheckedChange={(v) => quickToggle(m, { is_active: v })} />
@@ -149,7 +187,15 @@ function UserDialog({
 
   useEffect(() => {
     setForm(
-      manager ?? { manager_code: '', full_name: '', department: '', is_active: true, dashboard_enabled: true },
+      manager ?? {
+        manager_code: '',
+        full_name: '',
+        department: '',
+        is_active: true,
+        dashboard_enabled: true,
+        // คนใหม่ยังล็อกอินไม่ได้จนกว่าจะเปิดสิทธิ์ให้ — ต้องเป็นการตัดสินใจที่ตั้งใจ
+        can_login: false,
+      },
     );
   }, [manager, open]);
 
@@ -206,6 +252,12 @@ function UserDialog({
           </Field>
 
           <div className="rounded-md border p-3">
+            <SwitchRow
+              label={t('admin.loginAccess')}
+              hint={t('admin.loginAccessHint')}
+              checked={form.can_login ?? false}
+              onCheckedChange={(v) => setForm((f) => ({ ...f, can_login: v }))}
+            />
             <SwitchRow
               label={t('admin.activeUser')}
               checked={form.is_active ?? true}

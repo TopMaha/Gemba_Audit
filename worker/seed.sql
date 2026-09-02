@@ -1,217 +1,472 @@
 -- ============================================================================
---  Gemba Walk — ข้อมูลตั้งต้น
+--  Gemba Walk — ข้อมูลตั้งต้นของจริง (ไม่มีข้อมูลตัวอย่างแล้ว)
 --  รันด้วย: wrangler d1 execute gemba-audit --file=./seed.sql --remote
 --
---  แบ่งเป็น 2 ส่วน
---    ส่วน A  ข้อมูลอ้างอิง — จำเป็นต่อการใช้งานจริง ห้ามลบ
---    ส่วน B  ข้อมูลทดสอบ  — ลบทิ้งได้เมื่อขึ้นระบบจริง (ดูคำสั่งท้ายไฟล์)
+--  ที่มาของข้อมูล
+--    ผู้ใช้/ผู้ดูแล  ตาราง employees ในฐานข้อมูล psif-db ของโปรเจค PSIF
+--                   (393 คน — ตัดแถว RESIGNED-* ที่เป็นช่องว่างสำหรับพนักงานลาออกออกแล้ว)
+--    พื้นที่เดิน     แผนก/สายการผลิตจริง 20 แห่งจากชุดข้อมูลเดียวกัน
 --
---  ทุกคำสั่งใช้ INSERT OR IGNORE จึงรันซ้ำได้โดยไม่พัง และไม่ทับข้อมูลที่แก้ไปแล้ว
+--  รหัสเข้าระบบ = รหัสพนักงาน เช่น T-815 · L-3611 · PST742 · M-089
+--  รหัสเข้าหน้า /admin = รหัสพนักงานของผู้ดูแลระบบ 4 คน (ดูส่วน "ผู้ดูแลระบบ")
 --
---  เรื่องวันที่: D1 ทำงานบน UTC แต่ระบบนี้ใช้เวลาไทย จึงบวก '+7 hours' ทุกครั้ง
---  ใช้วันที่แบบสัมพัทธ์ (ไม่ hardcode) ข้อมูลตัวอย่างจึงสดเสมอไม่ว่ารันวันไหน
+--  ไฟล์นี้ไม่มีแผน/บันทึกการเดิน/ประวัติใด ๆ ทั้งสิ้น ระบบเริ่มจากศูนย์จริง
+--  ทุกคำสั่งใช้ INSERT OR IGNORE จึงรันซ้ำได้ และไม่ทับข้อมูลที่แก้ไปแล้วในแอป
 -- ============================================================================
-
-
--- ╔══════════════════════════════════════════════════════════════════════════╗
--- ║  ส่วน A — ข้อมูลอ้างอิง                                                  ║
--- ╚══════════════════════════════════════════════════════════════════════════╝
-
--- ── ผู้ดูแลระบบ (เข้าที่ /admin ด้วยรหัส 9999) ────────────────────────────
-INSERT OR IGNORE INTO superusers (id, admin_code, full_name) VALUES
-  ('su_01', '9999', 'ผู้ดูแลระบบ');
 
 
 -- ── ตั้งค่าระบบ (แถวเดียวเสมอ) ────────────────────────────────────────────
 INSERT OR IGNORE INTO app_settings (id, weekly_target, recent_visit_days, company_name, plant_name) VALUES
-  (1, 1, 7, 'Calue Manufacturing', 'โรงงานบางปะกง');
+  (1, 1, 7, 'TENNECO', 'TENNECO');
 
 
--- ── ผู้จัดการ 12 คน (mgr_12 ตั้งเป็น inactive ไว้ทดสอบการถูกปิดบัญชี) ─────
-INSERT OR IGNORE INTO managers
-  (id, manager_code, full_name, full_name_en, department, position, avatar_url, is_active, dashboard_enabled, created_at)
-VALUES
-  ('mgr_01', '1001', 'สมชาย วัฒนกิจ',     'Somchai W.',      'Production',  'Production Manager',  NULL, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  ('mgr_02', '1002', 'ปรียา ศรีสุข',      'Preeya S.',       'Quality',     'QA Manager',          NULL, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  ('mgr_03', '1003', 'อนุชา ทองดี',       'Anucha T.',       'Maintenance', 'Maintenance Manager', NULL, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  ('mgr_04', '1004', 'วิภาดา จันทร์เพ็ญ',  'Wipada J.',       'Warehouse',   'Warehouse Manager',   NULL, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  ('mgr_05', '1005', 'ธนากร พงษ์เจริญ',   'Thanakorn P.',    'Production',  'Shift Manager',       NULL, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  ('mgr_06', '1006', 'ณัฐพล อินทร์แก้ว',   'Nattapon I.',     'Safety',      'SHE Manager',         NULL, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  ('mgr_07', '1007', 'กมลชนก บุญมี',      'Kamonchanok B.',  'Engineering', 'Engineering Manager', NULL, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  ('mgr_08', '1008', 'สุริยา แสงทอง',      'Suriya S.',       'Production',  'Line Leader',         NULL, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  ('mgr_09', '1009', 'พิมพ์ชนก เรืองศรี',  'Pimchanok R.',    'HR',          'HR Manager',          NULL, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  ('mgr_10', '1010', 'เอกชัย มั่นคง',      'Ekkachai M.',     'Utility',     'Utility Manager',     NULL, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  ('mgr_11', '1011', 'จิราพร ใจงาม',      'Jiraporn J.',     'Quality',     'QC Supervisor',       NULL, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  ('mgr_12', '1012', 'ประเสริฐ ดำรงค์',    'Prasert D.',      'Production',  'Assistant Manager',   NULL, 0, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+-- ── ผู้ดูแลระบบ — เข้าที่ /admin ด้วยรหัสพนักงานของตัวเอง ─────────────────
+INSERT OR IGNORE INTO superusers (id, admin_code, full_name) VALUES
+  ('su_G_245', 'G-245', 'น.ส.สุมินตรา ชานนท์'),
+  ('su_T_738', 'T-738', 'นายสุธีรักษ์ เตยา'),
+  ('su_T_798', 'T-798', 'นายชัยสิทธิ์ ด้วงกัน'),
+  ('su_T_815', 'T-815', 'นายวิภาวัส จันทะคาม');
 
 
--- ── พื้นที่ 26 แห่ง — ต้องใส่ระดับบนก่อน เพราะ parent_id เป็น FK ───────────
-
--- ระดับบนสุด 6 แห่ง
-INSERT OR IGNORE INTO areas (id, area_name, area_name_en, parent_id, department, is_active) VALUES
-  ('ar_prod',   'สายการผลิต',          'Production',    NULL, 'Production',  1),
-  ('ar_wh',     'คลังสินค้า',           'Warehouse',     NULL, 'Warehouse',   1),
-  ('ar_util',   'ระบบสาธารณูปโภค',      'Utility',       NULL, 'Utility',     1),
-  ('ar_maint',  'ซ่อมบำรุง',            'Maintenance',   NULL, 'Maintenance', 1),
-  ('ar_qa',     'ห้องปฏิบัติการ QA',     'QA Laboratory', NULL, 'Quality',     1),
-  ('ar_common', 'พื้นที่ส่วนกลาง',       'Common Area',   NULL, 'HR',          1);
-
--- ระดับที่ 2
-INSERT OR IGNORE INTO areas (id, area_name, area_name_en, parent_id, department, is_active) VALUES
-  ('ar_line1',    'ไลน์ผลิต 1',            'Line 1',          'ar_prod',   'Production',  1),
-  ('ar_line2',    'ไลน์ผลิต 2',            'Line 2',          'ar_prod',   'Production',  1),
-  ('ar_line3',    'ไลน์ผลิต 3',            'Line 3',          'ar_prod',   'Production',  1),
-  ('ar_mix',      'ห้องผสม',               'Mixing Room',     'ar_prod',   'Production',  1),
-  ('ar_pack',     'แผนกบรรจุ',             'Packing',         'ar_prod',   'Production',  1),
-  ('ar_wh_in',    'พื้นที่รับเข้า',          'Inbound',         'ar_wh',     'Warehouse',   1),
-  ('ar_wh_out',   'พื้นที่จ่ายออก',          'Outbound',        'ar_wh',     'Warehouse',   1),
-  ('ar_wh_rack',  'โซนแร็ค A–C',           'Rack Zone A–C',   'ar_wh',     'Warehouse',   1),
-  ('ar_wh_fg',    'คลังสินค้าสำเร็จรูป',     'Finished Goods',  'ar_wh',     'Warehouse',   1),
-  ('ar_boiler',   'ห้องหม้อไอน้ำ',          'Boiler Room',     'ar_util',   'Utility',     1),
-  ('ar_comp',     'ห้องคอมเพรสเซอร์',       'Compressor Room', 'ar_util',   'Utility',     1),
-  ('ar_wwtp',     'ระบบบำบัดน้ำเสีย',       'WWTP',            'ar_util',   'Utility',     1),
-  ('ar_chiller',  'ห้องชิลเลอร์',           'Chiller Room',    'ar_util',   'Utility',     1),
-  ('ar_workshop', 'โรงซ่อม',                'Workshop',        'ar_maint',  'Maintenance', 1),
-  ('ar_spare',    'คลังอะไหล่',             'Spare Parts',     'ar_maint',  'Maintenance', 1),
-  ('ar_canteen',  'โรงอาหาร',               'Canteen',         'ar_common', 'HR',          1),
-  ('ar_gate',     'ประตูทางเข้า–ออก',       'Main Gate',       'ar_common', 'Safety',      1),
-  ('ar_park',     'ลานจอดรถ',               'Parking',         'ar_common', 'Safety',      1);
-
--- ระดับที่ 3 (ลูกของไลน์ผลิต 1)
-INSERT OR IGNORE INTO areas (id, area_name, area_name_en, parent_id, department, is_active) VALUES
-  ('ar_line1_a',  'สถานีประกอบ A', 'Assembly A',  'ar_line1', 'Production', 1),
-  ('ar_line1_qc', 'จุดตรวจ QC-1',  'QC Point 1',  'ar_line1', 'Quality',    1);
-
-
--- ── หัวข้อการเดิน 8 หัวข้อ ────────────────────────────────────────────────
+-- ── หัวข้อการเดิน 8 หัวข้อ (แก้/เพิ่มได้ในหน้าตั้งค่า) ─────────────────────────
 INSERT OR IGNORE INTO walk_themes (id, theme_name, theme_name_en, is_active) VALUES
   ('th_01', '1-Safety: พฤติกรรมความปลอดภัย', '1-Safety: Behaviour Based Safety', 1),
-  ('th_02', '2-Safety: การ์ดเครื่องจักร',     '2-Safety: Machine Guarding',       1),
-  ('th_03', '3-Safety: รถยก/MHE',            '3-Safety: MHE/PIVs',               1),
-  ('th_04', '4-Quality: ของเสียและงานแก้',    '4-Quality: Defect & Rework',       1),
-  ('th_05', '5-5ส และความสะอาด',             '5-5S & Housekeeping',              1),
-  ('th_06', '6-การทำงานตามมาตรฐาน',          '6-Standard Work',                  1),
-  ('th_07', '7-พลังงานและสิ่งแวดล้อม',        '7-Energy & Environment',           1),
-  ('th_08', '8-การมีส่วนร่วมของพนักงาน',      '8-People Engagement',              1);
+  ('th_02', '2-Safety: การ์ดเครื่องจักร', '2-Safety: Machine Guarding', 1),
+  ('th_03', '3-Safety: รถยก/MHE', '3-Safety: MHE/PIVs', 1),
+  ('th_04', '4-Quality: ของเสียและงานแก้', '4-Quality: Defect & Rework', 1),
+  ('th_05', '5-5ส และความสะอาด', '5-5S & Housekeeping', 1),
+  ('th_06', '6-การทำงานตามมาตรฐาน', '6-Standard Work', 1),
+  ('th_07', '7-พลังงานและสิ่งแวดล้อม', '7-Energy & Environment', 1),
+  ('th_08', '8-การมีส่วนร่วมของพนักงาน', '8-People Engagement', 1);
 
 
--- ── ประกาศหัวข้อประจำสัปดาห์นี้ ───────────────────────────────────────────
--- week_start = วันอาทิตย์ของสัปดาห์ปัจจุบัน คำนวณจาก strftime('%w') ซึ่งคืน 0 = อาทิตย์
-INSERT OR IGNORE INTO weekly_focus (id, week_start, week_end, message_th, message_en, is_active) VALUES
-  ('wf_01',
-   date('now', '+7 hours', '-' || strftime('%w', 'now', '+7 hours') || ' days'),
-   date('now', '+7 hours', '-' || strftime('%w', 'now', '+7 hours') || ' days', '+6 days'),
-   'สัปดาห์นี้เน้นความปลอดภัยรถยก (MHE/PIVs) และการ์ดเครื่องจักร — ขอให้ทุกท่านเดินอย่างน้อย 1 ครั้งในหัวข้อที่กำหนด',
-   'This week focuses on MHE/PIVs safety and machine guarding — please complete at least one walk on the highlighted themes.',
-   1);
-
-INSERT OR IGNORE INTO focus_themes (focus_id, theme_id) VALUES
-  ('wf_01', 'th_03'),
-  ('wf_01', 'th_02');
-
-
--- ╔══════════════════════════════════════════════════════════════════════════╗
--- ║  ส่วน B — ข้อมูลทดสอบ                                                    ║
--- ║  10 แผน · 5 บันทึกการเดิน (4 ผูกแผน + 1 Ad-hoc)                          ║
--- ╚══════════════════════════════════════════════════════════════════════════╝
-
--- ── แผนการเดิน ───────────────────────────────────────────────────────────
--- ครอบทุกสถานะ เพื่อให้ทดสอบ adherence() ได้ครบทุกกิ่ง
-INSERT OR IGNORE INTO gemba_plans (id, manager_id, plan_date, plan_time, area_id, note, status, created_at) VALUES
-  -- เดินไปแล้ว (มีบันทึกผูกอยู่ในส่วนถัดไป)
-  ('plan_0001', 'mgr_01', date('now', '+7 hours', '-6 days'),  '09:00', 'ar_line1_a', 'ตรวจตามรอบประจำสัปดาห์', 'completed', strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  ('plan_0002', 'mgr_02', date('now', '+7 hours', '-5 days'),  '10:30', 'ar_line1_qc', '',                      'completed', strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  ('plan_0003', 'mgr_06', date('now', '+7 hours', '-3 days'),  '14:00', 'ar_wh_rack',  '',                      'completed', strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  ('plan_0004', 'mgr_10', date('now', '+7 hours', '-2 days'),  '08:30', 'ar_boiler',   '',                      'completed', strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  -- ยกเลิก (ต้องไม่ถูกนับใน adherence)
-  ('plan_0005', 'mgr_03', date('now', '+7 hours', '-4 days'),  '13:00', 'ar_workshop', 'ติดประชุมด่วน',          'cancelled', strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  -- เลยกำหนดแล้วแต่ยังไม่ได้เดิน (ต้องถูกนับเป็นความผิดใน adherence)
-  ('plan_0006', 'mgr_04', date('now', '+7 hours', '-1 days'),  '11:00', 'ar_wh_in',    '',                      'planned',   strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  -- วันนี้
-  ('plan_0007', 'mgr_01', date('now', '+7 hours'),             '15:00', 'ar_pack',     '',                      'planned',   strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  ('plan_0008', 'mgr_07', date('now', '+7 hours'),             '16:00', 'ar_comp',     '',                      'planned',   strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  -- อนาคต (ต้องไม่ถูกนับเป็นความผิด)
-  ('plan_0009', 'mgr_02', date('now', '+7 hours', '+2 days'),  '09:30', 'ar_mix',      '',                      'planned',   strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  ('plan_0010', 'mgr_09', date('now', '+7 hours', '+4 days'),  '10:00', 'ar_canteen',  '',                      'planned',   strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
-
-INSERT OR IGNORE INTO plan_themes (plan_id, theme_id, sort_order) VALUES
-  ('plan_0001', 'th_01', 0), ('plan_0001', 'th_05', 1),
-  ('plan_0002', 'th_04', 0),
-  ('plan_0003', 'th_03', 0), ('plan_0003', 'th_02', 1),
-  ('plan_0004', 'th_07', 0),
-  ('plan_0005', 'th_06', 0),
-  ('plan_0006', 'th_05', 0), ('plan_0006', 'th_03', 1),
-  ('plan_0007', 'th_05', 0),
-  ('plan_0008', 'th_02', 0), ('plan_0008', 'th_06', 1),
-  ('plan_0009', 'th_04', 0),
-  ('plan_0010', 'th_08', 0);
+-- ── พื้นที่เดิน 20 แห่ง = แผนก/สายการผลิตจริง ───────────────────────────────
+-- ทุกแห่งเป็นระดับบนสุด (parent_id = NULL) แบ่งพื้นที่ย่อยเพิ่มได้ในหน้าตั้งค่า
+INSERT OR IGNORE INTO areas (id, area_name, area_name_en, parent_id, department, is_active) VALUES
+  ('ar_vsm1', 'สายการผลิต VSM1', 'VSM1', NULL, 'VSM1', 1),
+  ('ar_vsm2', 'สายการผลิต VSM2', 'VSM2', NULL, 'VSM2', 1),
+  ('ar_vsm3', 'สายการผลิต VSM3', 'VSM3', NULL, 'VSM3', 1),
+  ('ar_vsm4', 'สายการผลิต VSM4', 'VSM4', NULL, 'VSM4', 1),
+  ('ar_qc', 'ควบคุมคุณภาพ', 'Quality Control', NULL, 'Quality Control', 1),
+  ('ar_qa', 'ประกันคุณภาพ', 'Quality Assurance', NULL, 'Quality Assurance', 1),
+  ('ar_maint', 'ซ่อมบำรุง', 'Maintenance', NULL, 'Maintenance', 1),
+  ('ar_proc', 'วิศวกรรมกระบวนการ', 'Process Engineer', NULL, 'Process Engineer', 1),
+  ('ar_eng', 'วิศวกรรม', 'Engineer', NULL, 'Engineer', 1),
+  ('ar_wh', 'คลังสินค้า', 'Warehouse', NULL, 'Warehouse', 1),
+  ('ar_store', 'สโตร์/คลังอะไหล่', 'Store', NULL, 'Store', 1),
+  ('ar_pc', 'วางแผนการผลิต', 'Production Control', NULL, 'PC', 1),
+  ('ar_lean', 'ลีน', 'Lean', NULL, 'Lean', 1),
+  ('ar_ehs', 'ความปลอดภัยและสิ่งแวดล้อม', 'EHS', NULL, 'EHS', 1),
+  ('ar_hr', 'ทรัพยากรบุคคล', 'Human Resources', NULL, 'HR', 1),
+  ('ar_it', 'เทคโนโลยีสารสนเทศ', 'IT', NULL, 'IT', 1),
+  ('ar_acc', 'บัญชีและการเงิน', 'Accounting', NULL, 'Accounting', 1),
+  ('ar_pur', 'จัดซื้อ', 'Purchasing', NULL, 'Purchasing', 1),
+  ('ar_prog', 'โปรแกรมงานใหม่', 'Program', NULL, 'Program', 1),
+  ('ar_cs', 'ลูกค้าสัมพันธ์', 'Customer Service', NULL, 'Customer Service', 1);
 
 
--- ── บันทึกการเดิน ────────────────────────────────────────────────────────
-INSERT OR IGNORE INTO gemba_walk_records
-  (id, plan_id, manager_id, actual_date, actual_time, actual_area_id,
-   observation, has_issue, issue_summary, ci_required, ci_ticket_no, ci_ticket_link, completed_at)
+-- ── ผู้ใช้ 393 คน จากทะเบียนพนักงาน PSIF ──────────────────────────────────
+-- is_active = 0 คือคนที่ปิดบัญชีไว้แล้วในระบบต้นทาง (เข้าระบบไม่ได้)
+-- dashboard_enabled = 1 ทุกคน ตามที่ตกลงไว้ว่าให้เห็นภาพรวมทั้งโรงงานได้
+--
+-- can_login = สิทธิ์เข้าใช้แอป ผู้ดูแลระบบกำหนดเป็นรายคนได้ในหน้าตั้งค่า
+--   เปิดไว้ 63 คน = ระดับหัวหน้าขึ้นไปที่ยังทำงานอยู่
+--   (ผู้จัดการ · ผู้ดูแลแผนก · หัวหน้าทีม · ผู้ดูแลระบบ · เจ้าหน้าที่ความปลอดภัย)
+--   พนักงานอีก 330 คนยังอยู่ในทะเบียนเพื่อเลือกเป็น "ผู้ร่วมเดิน" ได้ แต่ล็อกอินไม่ได้
+--   เหตุผล: รหัสเข้าระบบคือรหัสพนักงานซึ่งเดาได้ ถ้าเปิดหมดก็เข้าแทนกันได้ทั้งโรงงาน
+INSERT OR IGNORE INTO managers
+  (id, manager_code, full_name, full_name_en, department, position, avatar_url, is_active, dashboard_enabled, can_login, created_at)
 VALUES
-  ('rec_0001', 'plan_0001', 'mgr_01', date('now', '+7 hours', '-6 days'), '09:15', 'ar_line1_a',
-   'พบพนักงานสวมใส่ PPE ครบถ้วนตามข้อกำหนด พูดคุยเรื่องจุดเสี่ยงหน้างานกับหัวหน้ากะ',
-   0, '', 0, '', '', date('now', '+7 hours', '-6 days') || 'T09:45:00.000Z'),
-
-  ('rec_0002', 'plan_0002', 'mgr_02', date('now', '+7 hours', '-5 days'), '10:40', 'ar_line1_qc',
-   'ตรวจการคัดแยกของเสีย พบถังขยะรีไซเคิลปนกับขยะทั่วไป ได้อบรมย้ำหน้างานแล้ว',
-   1, 'ของเสียถูกคัดแยกผิดประเภทที่จุดตรวจ QC-1', 1, 'CI-2731', '',
-   date('now', '+7 hours', '-5 days') || 'T11:20:00.000Z'),
-
-  ('rec_0003', 'plan_0003', 'mgr_06', date('now', '+7 hours', '-3 days'), '14:10', 'ar_wh_rack',
-   'พื้นที่ทางเดินรถยกมีกล่องวางกีดขวางบางส่วน ให้ย้ายออกทันทีและตีเส้นใหม่',
-   1, 'ทางเดินรถยกถูกกีดขวางบริเวณแร็ค B', 1, 'CI-2748', '',
-   date('now', '+7 hours', '-3 days') || 'T14:50:00.000Z'),
-
-  ('rec_0004', 'plan_0004', 'mgr_10', date('now', '+7 hours', '-2 days'), '08:40', 'ar_boiler',
-   'ระบบระบายอากาศเสียงดังผิดปกติ แจ้งทีมซ่อมบำรุงเข้าตรวจสอบภายในวันนี้',
-   1, 'พัดลมระบายอากาศห้องหม้อไอน้ำมีเสียงผิดปกติ', 0, '', '',
-   date('now', '+7 hours', '-2 days') || 'T09:10:00.000Z'),
-
-  -- Ad-hoc: เดินโดยไม่ได้วางแผนล่วงหน้า จึงมี plan_id เป็น NULL
-  ('rec_adhoc_0001', NULL, 'mgr_08', date('now', '+7 hours', '-1 days'), '13:20', 'ar_line2',
-   'ตรวจ 5ส บริเวณจุดเก็บเครื่องมือ พบเครื่องมือไม่คืนเข้าเงา (shadow board) 2 ชิ้น',
-   0, '', 0, '', '', date('now', '+7 hours', '-1 days') || 'T13:40:00.000Z');
-
-INSERT OR IGNORE INTO record_themes (record_id, theme_id, sort_order) VALUES
-  ('rec_0001', 'th_01', 0), ('rec_0001', 'th_05', 1),
-  ('rec_0002', 'th_04', 0),
-  ('rec_0003', 'th_03', 0), ('rec_0003', 'th_02', 1),
-  ('rec_0004', 'th_07', 0),
-  ('rec_adhoc_0001', 'th_05', 0);
-
-INSERT OR IGNORE INTO record_participants (id, record_id, participant_name, sort_order) VALUES
-  ('rp_0001', 'rec_0001', 'ก้องภพ (หัวหน้ากะ A)', 0),
-  ('rp_0002', 'rec_0001', 'มานี (ช่างเทคนิค)',     1),
-  ('rp_0003', 'rec_0002', 'สุดา (QC)',             0),
-  ('rp_0004', 'rec_0003', 'วีระ (หัวหน้าคลัง)',     0);
-
--- ยังไม่ใส่รูปตัวอย่าง เพราะ photo_key ต้องมีอ็อบเจกต์อยู่จริงใน R2
--- ถ้าจะทดสอบ ให้อัปโหลดผ่าน POST /api/uploads แล้วค่อยเพิ่มแถวที่นี่
-
-
--- ── ประวัติการแก้ไข + การเข้าสู่ระบบ (ไว้ทดสอบหน้าดูประวัติ) ──────────────
-INSERT OR IGNORE INTO change_history
-  (id, table_name, record_id, action_type, field, old_value, new_value, changed_by, changed_at) VALUES
-  ('ch_0001', 'gemba_walk_records', 'rec_0002', 'create', NULL, NULL, NULL, 'ปรียา ศรีสุข', strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-5 days')),
-  ('ch_0002', 'gemba_walk_records', 'rec_0002', 'update', 'ci_ticket_no', NULL, 'CI-2731', 'ปรียา ศรีสุข', strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-4 days'));
-
-INSERT OR IGNORE INTO login_history (id, actor_id, actor_name, role, at, result) VALUES
-  ('log_0001', 'mgr_01', 'สมชาย วัฒนกิจ', 'manager', strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-1 days'), 'success'),
-  ('log_0002', '-',      '9998',          'manager', strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-1 days'), 'failed');
-
-
--- ============================================================================
---  ล้างเฉพาะข้อมูลทดสอบ (ส่วน B) ตอนขึ้นระบบจริง — เก็บผู้ใช้/พื้นที่/หัวข้อไว้
---  คัดลอกไปรันเองเมื่อพร้อม
---
---    DELETE FROM login_history;
---    DELETE FROM change_history;
---    DELETE FROM gemba_walk_records;   -- ตารางลูกหายตาม CASCADE
---    DELETE FROM gemba_plans;          -- ตารางลูกหายตาม CASCADE
---
---  ลำดับสำคัญ: ต้องลบ records ก่อน plans เพราะ records อ้าง plan_id อยู่
--- ============================================================================
+  ('mgr_00', '00', 'Mr.Ivan Klimov', NULL, 'EHS', 'ผู้จัดการ', NULL, 1, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_640005', '640005', 'สุริยัน ศูนย์กลาง', NULL, 'VSM3', 'ผู้จัดการ', NULL, 1, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_G_105', 'G-105', 'นายวิทยา ภิญโญยิ่ง', NULL, 'Warehouse', 'ผู้ดูแลแผนก', NULL, 1, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_G_115', 'G-115', 'นางจินตนา ถาวรศิลป์', NULL, 'Quality Assurance', 'ผู้ดูแลแผนก', NULL, 1, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_G_131', 'G-131', 'น.ส.กษมา ภิรมย์ศรี', NULL, 'Quality Control', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_G_133', 'G-133', 'นายณัฐวุฒิ สุขเนาวรัตน์', NULL, 'IT', 'ผู้ดูแลแผนก', NULL, 1, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_G_134', 'G-134', 'น.ส.อรนุช คำลือเมือง', NULL, 'Quality Control', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_G_186', 'G-186', 'น.ส.สุพรรณรสา คำยม', NULL, 'Accounting', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_G_205', 'G-205', 'น.ส.ปทิตตา พรธาดาศักดิ์', NULL, 'Purchasing', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_G_213', 'G-213', 'นายธีระพล หาสจิตโต', NULL, 'PC', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_G_214', 'G-214', 'นายศรายุธ พวงผกา', NULL, 'Store', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_G_215', 'G-215', 'นายอุดม บุญคง', NULL, 'PC', 'ผู้ดูแลแผนก', NULL, 1, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_G_216', 'G-216', 'น.ส.อลิสา สุภวงษ์', NULL, 'PC', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_G_234', 'G-234', 'นายโกสินทร์ ราชประโคน', NULL, 'Store', 'ผู้จัดการ', NULL, 1, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_G_235', 'G-235', 'น.ส.ณภัทร์ พูลสวัสดิ์', NULL, 'Purchasing', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_G_237', 'G-237', 'น.ส.สราพร อุทัยศรี', NULL, 'PC', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_G_245', 'G-245', 'น.ส.สุมินตรา ชานนท์', NULL, 'HR', 'ผู้ดูแลระบบ', NULL, 1, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_G_246', 'G-246', 'น.ส.ขนิษฐา แท้รัมย์', NULL, 'Customer Service', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_G_250', 'G-250', 'น.ส.ลภัสรดา ทองนอก', NULL, 'Accounting', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_G_252', 'G-252', 'น.ส.พรพิมล โสตกลาง', NULL, 'HR', 'พนักงาน', NULL, 0, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_G_253', 'G-253', 'นางสาวสุกานดา รักษ์ถาวรนันท์', NULL, 'Accounting', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_G_255', 'G-255', 'นางจุฑารัตน์ ศรีบุตรา', NULL, 'EHS', 'เจ้าหน้าที่ความปลอดภัย', NULL, 1, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_G_256', 'G-256', 'น.ส.พณิดา ศรีชมภู', NULL, 'Accounting', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_G_259', 'G-259', 'น.ส.มีนตรา วิเชียรพงษ์', NULL, 'Customer Service', 'ผู้ดูแลแผนก', NULL, 1, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_G_260', 'G-260', 'น.ส.เพชรลดา พรมมา', NULL, 'VSM4', 'ผู้ดูแลแผนก', NULL, 1, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_1058', 'L-1058', 'นายสรศักดิ์ สุริยะ', NULL, 'VSM4', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_1101', 'L-1101', 'นายเดชา คำพิมูล', NULL, 'VSM4', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_1195', 'L-1195', 'น.ส.สุดาภร สุดใจ', NULL, 'VSM3', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_1283', 'L-1283', 'น.ส.ณัชชา สุทธิเจริญ', NULL, 'VSM2', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_1372', 'L-1372', 'นายวิชัย เจริญเขต', NULL, 'VSM3', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_1529', 'L-1529', 'นายสามารถ ครัวจัตุรัส', NULL, 'VSM2', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_1534', 'L-1534', 'น.ส.รัตณาภรณ์ มากเกิด', NULL, 'VSM2', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_1567', 'L-1567', 'นายภาศุ สงค์พิมพ์', NULL, 'VSM3', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_1598', 'L-1598', 'นายสัญญา คิดโสดา', NULL, 'VSM4', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_1606', 'L-1606', 'นายธรรมนูญ พงษ์ไธสง', NULL, 'Quality Control', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_1686', 'L-1686', 'นายคำพันธ์ สาเกตุ', NULL, 'Quality Control', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_1763', 'L-1763', 'นายสมชาย พรมชาติ', NULL, 'VSM4', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_1776', 'L-1776', 'นายประวิง ไฝ่ไร่', NULL, 'Quality Control', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_1787', 'L-1787', 'นายสุทิน แสงสุวรรณ', NULL, 'VSM1', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_1827', 'L-1827', 'นายสุทิศ ภูถมดี', NULL, 'VSM4', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_1839', 'L-1839', 'นายนนทชัย กันกา', NULL, 'Quality Control', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_1876', 'L-1876', 'นายเรวัต หลาบสุภา', NULL, 'VSM2', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_1879', 'L-1879', 'นายวิฑูรย์ สุขเลิศ', NULL, 'VSM4', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_1928', 'L-1928', 'นายกันยา สวนธิ', NULL, 'VSM4', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_1930', 'L-1930', 'นายวสันต์ จันทคีรี', NULL, 'Quality Control', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_1940', 'L-1940', 'นายเพิน ชูสะติ', NULL, 'VSM1', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_2005', 'L-2005', 'นายตรีภพ สมพงษ์', NULL, 'Quality Control', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_2033', 'L-2033', 'นายเอกชัย ประดิษฐ์เทา', NULL, 'VSM3', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_2088', 'L-2088', 'นายยุทธพิชัย สมหวัง', NULL, 'Quality Control', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_2101', 'L-2101', 'นายนพรัตน์ พวงพันธ์', NULL, 'VSM4', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_2136', 'L-2136', 'นายทองพูน เพิ่มพูล', NULL, 'VSM3', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_2155', 'L-2155', 'นายไพศักดิ์ ม่วงอ่อน', NULL, 'VSM1', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_2176', 'L-2176', 'นายโกวิทย์ คำภีร์', NULL, 'VSM2', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_2194', 'L-2194', 'นายทวี จิรัมย์', NULL, 'VSM2', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_2209', 'L-2209', 'นายดุสิต จำรองพันธ์', NULL, 'VSM2', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_2297', 'L-2297', 'นายธนดล สัตบุตร', NULL, 'VSM2', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_2336', 'L-2336', 'นายดำรงค์ฤทธิ์ อินยม', NULL, 'VSM2', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_2352', 'L-2352', 'น.ส.สุภาพร ปานพุ่ม', NULL, 'Quality Control', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_2363', 'L-2363', 'นายคำนึง เพชรประเสริฐ', NULL, 'VSM1', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_2404', 'L-2404', 'นายบรรจง สูแพะ', NULL, 'VSM2', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_2411', 'L-2411', 'นายณรงค์ศักดิ์ พิมพะ', NULL, 'VSM2', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_2429', 'L-2429', 'น.ส.ทองพูน ขุนภักนา', NULL, 'VSM2', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_2446', 'L-2446', 'นายสมเดช สมญา', NULL, 'Quality Control', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_2475', 'L-2475', 'นายวิเศษ เหง้าสุวรรณ', NULL, 'VSM2', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_2480', 'L-2480', 'นายสมคิด ทรทึก', NULL, 'VSM4', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_2488', 'L-2488', 'นายสราวุฒิ ปานทอง', NULL, 'VSM4', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_2499', 'L-2499', 'นายทรงศักดิ์ สืบเสระ', NULL, 'VSM4', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_2539', 'L-2539', 'นายนิพนธ์ สีระพันธ์', NULL, 'Quality Control', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_2553', 'L-2553', 'น.ส.เพ็ญนภา มีพิมพ์', NULL, 'VSM2', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_2566', 'L-2566', 'น.ส.ประภัสสร ศรีสว่าง', NULL, 'VSM2', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_2567', 'L-2567', 'นายสานนท์ พลแสน', NULL, 'Warehouse', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_2598', 'L-2598', 'นายถาวร นิลผาพงษ์', NULL, 'Quality Control', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_2612', 'L-2612', 'นายทัศพงษ์ องอาจ', NULL, 'VSM2', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_2623', 'L-2623', 'น.ส.หยาดพิรุณ สัตถาผล', NULL, 'VSM3', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_2631', 'L-2631', 'นายประยุทธ ฝากาทอง', NULL, 'VSM1', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_2634', 'L-2634', 'นายภูณัทกิจ อ่อนวิมล', NULL, 'VSM4', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_2642', 'L-2642', 'น.ส.เกษร อุ่นมุกดา', NULL, 'Quality Control', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_2658', 'L-2658', 'น.ส.มาลิณี จอดพิมาย', NULL, 'VSM4', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_2659', 'L-2659', 'นายณรงค์ จอดพิมาย', NULL, 'VSM4', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_2677', 'L-2677', 'นายชาคริต บุญศิริกร', NULL, 'VSM4', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_2687', 'L-2687', 'นายโกมิน จันทร์ดี', NULL, 'VSM1', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_2722', 'L-2722', 'นายณรงค์ ปาติตัง', NULL, 'VSM3', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_2734', 'L-2734', 'นายสมพร พุ่มมะลิ', NULL, 'VSM1', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_2737', 'L-2737', 'นายชลาธิป จำเรียง', NULL, 'VSM1', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_2741', 'L-2741', 'นายไพบูลย์ เถาว์โท', NULL, 'Quality Assurance', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_2776', 'L-2776', 'น.ส.อารยา เกือกรัมย์', NULL, 'Quality Control', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_2782', 'L-2782', 'น.ส.วิมล จันทร์สมร', NULL, 'VSM2', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_2796', 'L-2796', 'น.ส.พรทิพย์ หอมจันทร์', NULL, 'Quality Control', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_2809', 'L-2809', 'น.ส.อรชา ทาสีคำ', NULL, 'VSM3', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_2813', 'L-2813', 'น.ส.สุวนันท์ พวงจันทร์', NULL, 'Store', 'ผู้ดูแลแผนก', NULL, 1, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_2818', 'L-2818', 'น.ส.กรชนก กรุดเงิน', NULL, 'VSM2', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_2836', 'L-2836', 'น.ส.ธมลวรรณ ดาวสกุล', NULL, 'VSM2', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_2847', 'L-2847', 'นายวัฒชัย ปิตตาละตัง', NULL, 'Quality Control', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_2851', 'L-2851', 'นายเศรษฐพงศ์ ไพบูลย์', NULL, 'VSM1', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_2861', 'L-2861', 'น.ส.การะเกษ สุโพธิ์', NULL, 'Quality Control', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_2920', 'L-2920', 'น.ส.จิตติมา เปลี่ยนวงษ์', NULL, 'Quality Control', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_2929', 'L-2929', 'นายสุวรรณ สุขสถิตย์', NULL, 'VSM4', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_2935', 'L-2935', 'นายพิสิษฐ์ อิ่มเพ็ง', NULL, 'VSM4', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_2939', 'L-2939', 'น.ส.สุภาพร คิดกล้า', NULL, 'VSM2', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_2972', 'L-2972', 'น.ส.ทัศดี เวียงแก้ว', NULL, 'VSM3', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_2984', 'L-2984', 'น.ส.ขนิษฐา โสคำ', NULL, 'VSM2', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_2995', 'L-2995', 'นายสิงห์สังเวียร จำเริญไกร', NULL, 'VSM2', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3007', 'L-3007', 'น.ส.กนกพร พุฒทอง', NULL, 'Quality Assurance', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3012', 'L-3012', 'นายจีราวัฒน์ บวรเกษมพงศ์', NULL, 'VSM4', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3015', 'L-3015', 'นายวิรุต การุณรัตน์', NULL, 'VSM4', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3019', 'L-3019', 'น.ส.จันทร์เพ็ญ แสงรส', NULL, 'VSM2', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3035', 'L-3035', 'นายจักรินทร์ นิสสัยดี', NULL, 'VSM4', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3045', 'L-3045', 'น.ส.นุจรินทร์ เรืองจันทา', NULL, 'VSM3', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3062', 'L-3062', 'นายอภิวัฒน์ หาดจันทร์', NULL, 'VSM4', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3093', 'L-3093', 'นายวิรัช แจ่มจำรัส', NULL, 'VSM3', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3096', 'L-3096', 'นายบรรหาญ แสงอ่อน', NULL, 'VSM4', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3101', 'L-3101', 'นายสังสรรค์ จันดี', NULL, 'VSM1', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3105', 'L-3105', 'นายสุขกมล กาภูคำ', NULL, 'VSM3', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3114', 'L-3114', 'นายคชา กล้าหาญ', NULL, 'VSM3', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3169', 'L-3169', 'นายสมพงษ์ ลองพล', NULL, 'VSM3', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3264', 'L-3264', 'นายประวิท เดชโชค', NULL, 'Quality Control', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3295', 'L-3295', 'นายชวภณ เสียงเย็น', NULL, 'VSM3', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3299', 'L-3299', 'นายไพรินทร์ อินทร์ทอง', NULL, 'VSM2', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3327', 'L-3327', 'นายเนตร์น้อย พรมหากุล', NULL, 'VSM1', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3330', 'L-3330', 'นายธีรพงษ์ สิงห์สำราญ', NULL, 'VSM3', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3338', 'L-3338', 'นายปราการณ์ สุริฉาย', NULL, 'Quality Assurance', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3362', 'L-3362', 'นายสุรสิทธิ์ นรสาร', NULL, 'VSM3', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3369', 'L-3369', 'นายทิฆัมพร เพสารี', NULL, 'VSM1', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3374', 'L-3374', 'นายปัญญา ประวันนา', NULL, 'VSM4', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3377', 'L-3377', 'นายธนภัทร์ หนุนโชค', NULL, 'VSM4', 'พนักงาน', NULL, 0, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3378', 'L-3378', 'นายจักรพันธ์ เทียนหอม', NULL, 'VSM4', 'ผู้ดูแลแผนก', NULL, 1, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3383', 'L-3383', 'นายทศพร ประภาวิชา', NULL, 'VSM1', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3385', 'L-3385', 'นายทักษิณ เพชรโสภา', NULL, 'VSM2', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3388', 'L-3388', 'นายเสรี สิงห์ชู', NULL, 'Quality Control', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3394', 'L-3394', 'นายวีระยุทธ งามดี', NULL, 'VSM3', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3412', 'L-3412', 'น.ส.บังอร แก้ววิเศษ', NULL, 'Quality Control', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3414', 'L-3414', 'นายพิชิตชัย พรมจันทร์', NULL, 'VSM1', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3419', 'L-3419', 'นายปัญญา ผจญกิจ', NULL, 'VSM2', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3422', 'L-3422', 'น.ส.เทียมจิตร นวลอินทร์', NULL, 'VSM2', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3425', 'L-3425', 'นายโกมน อุ่นสวัสดี', NULL, 'VSM1', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3429', 'L-3429', 'นายเจริญทอง ปัญหาไชย', NULL, 'VSM1', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3430', 'L-3430', 'นายปรัชญา ขาวงาม', NULL, 'VSM1', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3431', 'L-3431', 'นายกฤษณ์ ซื้อจริง', NULL, 'VSM4', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3442', 'L-3442', 'นางประภาภรณ์ อรุณโรจน์', NULL, 'VSM3', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3452', 'L-3452', 'นายอิสระ ดัชถุยาวัตร', NULL, 'VSM1', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3453', 'L-3453', 'นายประจญ ชะตารัมย์', NULL, 'VSM3', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3455', 'L-3455', 'นายชัชชัย ชนะชัย', NULL, 'VSM3', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3461', 'L-3461', 'นายสายชล แสงทองไชย์', NULL, 'VSM1', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3470', 'L-3470', 'นายธงชัย บุญจิตร', NULL, 'VSM2', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3474', 'L-3474', 'น.ส.อรณี หมู่ศิริ', NULL, 'VSM2', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3475', 'L-3475', 'นายณัฐวัติ ผดุงภักดี', NULL, 'VSM1', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3477', 'L-3477', 'นายสำเริง ลักษร', NULL, 'Warehouse', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3479', 'L-3479', 'นายอลงกรณ์ เทียงดาห์', NULL, 'VSM2', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3485', 'L-3485', 'นายใกรญษิต พรมทอง', NULL, 'VSM1', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3495', 'L-3495', 'นายพรประชา ไชยลาด', NULL, 'VSM3', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3500', 'L-3500', 'นายอัตพล โผภูเขียว', NULL, 'VSM3', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3501', 'L-3501', 'นายสุภัค โจนรัมย์', NULL, 'VSM4', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3503', 'L-3503', 'นายศราวุธ แก้วกิ่ง', NULL, 'VSM2', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3504', 'L-3504', 'ว่าที่ ร.ต.ธานี วงค์วัฒน์', NULL, 'VSM2', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3508', 'L-3508', 'นายณัฐวัฒน์ พรมสันเทียะ', NULL, 'VSM2', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3516', 'L-3516', 'นายอำพล เมฆวัน', NULL, 'Quality Control', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3517', 'L-3517', 'นายเกียรติศักดิ์ เรืองเดชา', NULL, 'VSM1', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3520', 'L-3520', 'นายนิกูลชัย กองลี', NULL, 'VSM1', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3522', 'L-3522', 'นายวัฒนา การินทร์', NULL, 'VSM1', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3523', 'L-3523', 'นายณัฐวุฒิ จันทร์ขำ', NULL, 'Quality Control', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3525', 'L-3525', 'นายปรนนท์ ชื่นชม', NULL, 'Store', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3527', 'L-3527', 'นายเกียรติศักดิ์ หล้ามณี', NULL, 'VSM4', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3528', 'L-3528', 'นายสามารถ สำราญใจ', NULL, 'VSM3', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3529', 'L-3529', 'นายอาทิตย์ ทองปาน', NULL, 'VSM2', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3530', 'L-3530', 'นายกลองชัย พันภักดิ์', NULL, 'VSM2', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3533', 'L-3533', 'นายคมสัน เทียนชัย', NULL, 'VSM3', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3538', 'L-3538', 'นายพนมพร สมพร', NULL, 'VSM3', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3539', 'L-3539', 'นายภูริเดช ขันนาค', NULL, 'VSM2', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3544', 'L-3544', 'นายปรีชา อสิพงษ์', NULL, 'VSM1', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3546', 'L-3546', 'นายวรพล ทองทา', NULL, 'VSM2', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3549', 'L-3549', 'นายอภิวัฒน์ พันธ์เดช', NULL, 'VSM2', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3550', 'L-3550', 'นายวรพันธ์ แฝดสุระ', NULL, 'Quality Control', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3557', 'L-3557', 'นายพุฒิพงศ์ ภูษี', NULL, 'VSM3', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3559', 'L-3559', 'นายธนากร สีหานาม', NULL, 'VSM3', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3561', 'L-3561', 'น.ส.ปิยมาศ จันเรียน', NULL, 'Quality Control', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3565', 'L-3565', 'นายมงคล เวนุอาธร', NULL, 'VSM3', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3567', 'L-3567', 'นายพัชกฤตย์ ขันศิลา', NULL, 'VSM3', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3568', 'L-3568', 'นายอนันต์ ก่อเกิด', NULL, 'VSM1', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3570', 'L-3570', 'นายอโนทัย กำเพ็ชร', NULL, 'VSM1', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3571', 'L-3571', 'นายชนกันต์ ผลมีศักดิ์', NULL, 'VSM3', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3572', 'L-3572', 'น.ส.ดมิสา ศาลางาม', NULL, 'Quality Control', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3573', 'L-3573', 'นายจตุรทนต์ ปิตะธารา', NULL, 'VSM2', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3574', 'L-3574', 'นายศราวุฒิ ทองอ้ม', NULL, 'VSM2', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3576', 'L-3576', 'นายนิพนธ์ ชาญเดช', NULL, 'VSM3', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3577', 'L-3577', 'นายณัฐสิทธิ์ ผันผาย', NULL, 'VSM1', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3578', 'L-3578', 'น.ส.ณัฐธยาน์ สุระชาติ', NULL, 'Quality Control', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3581', 'L-3581', 'นายวิทยา ขันตี', NULL, 'VSM2', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3582', 'L-3582', 'นายกิตติภพ บัวองค์', NULL, 'VSM4', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3583', 'L-3583', 'นายวัฒนา สอนไชย', NULL, 'VSM4', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3584', 'L-3584', 'นายธนากร วรรณทวี', NULL, 'VSM1', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3586', 'L-3586', 'นายธวัชชัย พิลาพอง', NULL, 'VSM3', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3587', 'L-3587', 'นายเอกรินทร์ ปัสสาคำ', NULL, 'VSM3', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3588', 'L-3588', 'นายสุรศักด์ ชมชื่น', NULL, 'VSM1', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3590', 'L-3590', 'นายศุภกิจ เหลาเพ็ง', NULL, 'VSM2', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3591', 'L-3591', 'นายณัฐพงษ์ สีสันงาม', NULL, 'VSM4', 'พนักงาน', NULL, 0, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3594', 'L-3594', 'นางพัชรินทร์ สุขพรรณ์', NULL, 'VSM2', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3595', 'L-3595', 'นางสาวพินศร มักคะสุด', NULL, 'Quality Control', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3596', 'L-3596', 'นายคมกฤษ แสนธิ', NULL, 'VSM2', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3597', 'L-3597', 'นายอนุสรณ์ ขุนจร', NULL, 'VSM3', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3598', 'L-3598', 'นายอัจฉรา เปร่งเพิ่มพูล', NULL, 'Quality Control', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3599', 'L-3599', 'นายอภิชัย นาคำมูล', NULL, 'Warehouse', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3600', 'L-3600', 'นายหงษ์ เนียมชุมแสง', NULL, 'Warehouse', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3601', 'L-3601', 'นายโพธิ์ไทร แก้ววิเชียร', NULL, 'Warehouse', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3602', 'L-3602', 'นายประเสริฐ นาจาน', NULL, 'Warehouse', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3603', 'L-3603', 'นายวีรพล บัวงาม', NULL, 'VSM1', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3604', 'L-3604', 'นายณัฐพงษ์ ไผ่เรือง', NULL, 'VSM1', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3605', 'L-3605', 'น.ส.นฤมล ดีเกตุ', NULL, 'VSM2', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3606', 'L-3606', 'นายอภิสิทธิ์ ป้องศรี', NULL, 'VSM3', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3607', 'L-3607', 'นายอนุชิต อินทมาตย์', NULL, 'VSM3', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3608', 'L-3608', 'นายประเวท กิ่งพุ่ม', NULL, 'VSM4', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3609', 'L-3609', 'นายภคินัย สาผม', NULL, 'VSM4', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3610', 'L-3610', 'นายวัชรินทร์ คำศรี', NULL, 'VSM4', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_3611', 'L-3611', 'นายธีรพัฒน์ อินทร์สีดา', NULL, 'VSM4', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_603', 'L-603', 'นายรุ่งโรจน์ วรรณสุทธะ', NULL, 'VSM4', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_620', 'L-620', 'นายนิยม เชื้อหนองทอน', NULL, 'VSM1', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_761', 'L-761', 'นายจินดา ไชยพินิจ', NULL, 'VSM2', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_855', 'L-855', 'นายสำเนียง รุ่งเรือง', NULL, 'Quality Control', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_895', 'L-895', 'นายประพันธ์ จันทร์งาม', NULL, 'VSM1', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_896', 'L-896', 'นายสมเพชร แสงสุวรรณ์', NULL, 'VSM1', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_913', 'L-913', 'นายอรุณ อินผ่อง', NULL, 'VSM3', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_L_929', 'L-929', 'นายชัยยุทธิ์ ประสงค์จิรกุล', NULL, 'Quality Control', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_M_036', 'M-036', 'ว่าที่ ร.ต.ธวัชชัย คลังผา', NULL, 'Maintenance', 'ผู้จัดการ', NULL, 1, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_M_057', 'M-057', 'นายมนตรี ปานเจริญ', NULL, 'VSM4', 'ผู้จัดการ', NULL, 0, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_M_065', 'M-065', 'นายศราวุธ สุทธิบูลย์', NULL, 'Process Engineer', 'ผู้จัดการ', NULL, 1, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_M_068', 'M-068', 'นายนิยม ซองพู', NULL, 'Lean', 'ผู้จัดการ', NULL, 1, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_M_072', 'M-072', 'นายดวงชีวิน ประภัสรานันท์', NULL, 'Engineer', 'ผู้จัดการ', NULL, 1, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_M_074', 'M-074', 'น.ส.โชติกา ณ ร้อยเอ็ด', NULL, 'Accounting', 'ผู้จัดการ', NULL, 1, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_M_075', 'M-075', 'นายชัยทัต บุญเจริญ', NULL, 'EHS', 'เจ้าหน้าที่ความปลอดภัย', NULL, 1, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_M_083', 'M-083', 'นายศุภฤกษ์ กุลราตรี', NULL, 'Quality Assurance', 'ผู้จัดการ', NULL, 1, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_M_084', 'M-084', 'น.ส.เปรมยุดา สกุลเดียว', NULL, 'PC', 'ผู้จัดการ', NULL, 1, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_M_085', 'M-085', 'น.ส.ณฐภัทร สุขนิรันดร์กุล', NULL, 'Program', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_M_086', 'M-086', 'นายสุพจน์ ฉ่ำมาลัย', NULL, 'Quality Assurance', 'ผู้จัดการ', NULL, 1, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_M_087', 'M-087', 'นายชานนท์ แสงสุข', NULL, 'VSM2', 'ผู้จัดการ', NULL, 1, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_M_088', 'M-088', 'นายเอกพล วงค์ชนะศรี', NULL, 'VSM1', 'ผู้จัดการ', NULL, 1, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_M_089', 'M-089', 'นายสัญญา ทองนอก', NULL, 'Maintenance', 'ผู้จัดการ', NULL, 1, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_PST189', 'PST189', 'นายเกียรติศักดิ์ แก้วประทุม', NULL, 'VSM1', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_PST596', 'PST596', 'นางสาววิภาดา ชัยสีหา', NULL, 'VSM1', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_PST621', 'PST621', 'นายเอกลักษณ์ พงษ์ธนู', NULL, 'VSM2', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_PST630', 'PST630', 'นายสะอาด นาบำรุง', NULL, 'Warehouse', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_PST640', 'PST640', 'นายอัษฎาวุธ ราศรี', NULL, 'VSM2', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_PST650', 'PST650', 'นายบุรัญ หาริวงค์', NULL, 'VSM3', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_PST654', 'PST654', 'นายอดิศักดิ์ แสงขาว', NULL, 'VSM2', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_PST658', 'PST658', 'นายลิขิต สถิตชัย', NULL, 'VSM1', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_PST664', 'PST664', 'นายวีรพล บัวงาม', NULL, 'VSM1', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_PST667', 'PST667', 'นายณัฐพงษ์ ไผ่เรือง', NULL, 'VSM1', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_PST684', 'PST684', 'นายชโนทัย สุขสมบัติ', NULL, 'VSM3', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_PST694', 'PST694', 'นายพงษ์สวัสดิ์ ชะนะเคน', NULL, 'VSM1', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_PST702', 'PST702', 'นายธีรพัฒน์ อินทร์สีดา', NULL, 'VSM4', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_PST704', 'PST704', 'นายธีรพงศ์ ทำเจริญตระกูล', NULL, 'VSM2', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_PST707', 'PST707', 'นายกิจชนะ ยันรัมย์', NULL, 'VSM1', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_PST708', 'PST708', 'นายวชิระ ศรีนอก', NULL, 'VSM2', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_PST709', 'PST709', 'นายวัชรินทร์ ยอดดี', NULL, 'VSM4', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_PST711', 'PST711', 'นายกิตติพงษ์ นุชเฉย', NULL, 'VSM2', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_PST717', 'PST717', 'นางสาวนฤมล ดีเกตุ', NULL, 'VSM2', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_PST742', 'PST742', 'นางสาวจีรนันท์ ลดาพัน', NULL, 'VSM4', 'เจ้าหน้าที่ความปลอดภัย', NULL, 1, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_PST743', 'PST743', 'นายพัฒนกร ศิริเวช', NULL, 'VSM3', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_PST745', 'PST745', 'นายธีรศักดิ์ สุขไชยสงค์', NULL, 'VSM1', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_PST746', 'PST746', 'นายเสฏฐพงศ์ กอมาตย์', NULL, 'VSM1', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_PST747', 'PST747', 'นายวิชญ์พล ภูกระบิล', NULL, 'VSM1', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_PST748', 'PST748', 'นายสมหมาย สุขแสวง', NULL, 'VSM1', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_PST749', 'PST749', 'นางสาวอรัญญา อินศวร', NULL, 'VSM2', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_PST750', 'PST750', 'นายกิตติศักดิ์ บูรณะ', NULL, 'VSM2', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_PST751', 'PST751', 'นายฉัตรชัย เชียงริน', NULL, 'VSM3', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_PST752', 'PST752', 'นายพิษณุ พิมมะทา', NULL, 'VSM3', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_PST753', 'PST753', 'นายทวีวัฒน์ นักบุญ', NULL, 'VSM3', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_PST755', 'PST755', 'นายอำนาจ ดำรงกิจ', NULL, 'VSM4', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_PST756', 'PST756', 'นายสมพล ทองสุด', NULL, 'VSM1', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_PST759', 'PST759', 'นายเอกชัย โก้พิมาย', NULL, 'VSM4', 'พนักงาน', NULL, 0, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_PST760', 'PST760', 'นายชัยยงค์ มณีใส', NULL, 'VSM2', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_PST761', 'PST761', 'นายธีรวัฒน์ อ้นป้อม', NULL, 'Warehouse', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_PST762', 'PST762', 'นายธวัชชัย กองเพชร', NULL, 'VSM1', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_PST763', 'PST763', 'นายถิรธรรม ทองพา', NULL, 'VSM2', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_PST765', 'PST765', 'น.ส.สุภาศิลป์ ชาคาน', NULL, 'VSM2', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_PST767', 'PST767', 'นายกล้าณรงค์ ภูบังดาว', NULL, 'Maintenance', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_PST768', 'PST768', 'นายพันธกานต์ วงษ์พยัคฆ์', NULL, 'Maintenance', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_PST771', 'PST771', 'นายประเสริฐศักดิ์ สมบัติ', NULL, 'VSM3', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_PST773', 'PST773', 'นายสุรพงศ์ คำดี', NULL, 'VSM3', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_PST774', 'PST774', 'นายทัศนพล หงส์ชุม', NULL, 'VSM3', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_PST776', 'PST776', 'นายเกียรติศักดิ์ ทองยิ่ง', NULL, 'VSM2', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_PST779', 'PST779', 'นายเจตนิพัทธ์ ชมพู', NULL, 'VSM2', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_PST780', 'PST780', 'นายวัชรพล แอมรัมย์', NULL, 'VSM2', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_PST782', 'PST782', 'นายพายุ กุลอัก', NULL, 'VSM3', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_PST784', 'PST784', 'นายวินัฐ สิงห์ลี', NULL, 'VSM2', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_PST786', 'PST786', 'นางสาวอังควิภา จามะรีย์', NULL, 'Quality Control', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_PST789', 'PST789', 'นายภานุพงษ์ การงาน', NULL, 'VSM2', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_PST791', 'PST791', 'นายคธาวุธ กล่ำเชย', NULL, 'VSM2', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_PST794', 'PST794', 'นายพุฒิพงษ์ ฝากเมีย', NULL, 'VSM3', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_PST796', 'PST796', 'นายศุภวิชญ์ แก้วพิลา', NULL, 'VSM1', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_PST797', 'PST797', 'นายพงษ์พิสุทธิ์ ยิ่งสำราญ', NULL, 'VSM1', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_PST798', 'PST798', 'นายณัฐพงษ์ ศรีปราชญ์', NULL, 'VSM3', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_PST799', 'PST799', 'นายรภีพัฒน์ ขุมเงิน', NULL, 'VSM3', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_PST800', 'PST800', 'นายปฏิพล แกมชัยภูมิ', NULL, 'VSM3', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_PST801', 'PST801', 'นายปราโมทย์ อินธิไชย', NULL, 'VSM3', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_PST802', 'PST802', 'นายวรรณชัย โพธิ์หล้า', NULL, 'VSM4', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_PST804', 'PST804', 'นายณัฐพล บัวลี', NULL, 'VSM1', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_PST805', 'PST805', 'นางสาววิมลพรรณ เพชรสังหาร', NULL, 'VSM2', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_PST807', 'PST807', 'นายจักรพันธ์ แก่นจันทร์', NULL, 'VSM3', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_PST808', 'PST808', 'นายนาทนิรันดร์ จำปาแก้ว', NULL, 'VSM3', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_PST810', 'PST810', 'นายเจษฎา กาบแก้ว', NULL, 'VSM1', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_PST811', 'PST811', 'นายวัชรินทร์ สุขบรรณ์', NULL, 'VSM2', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_PST812', 'PST812', 'นายภูวดล พริ้งเพราะ', NULL, 'VSM3', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_PST814', 'PST814', 'นายสุชิน อินธิราช', NULL, 'VSM4', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_S_019', 'S-019', 'นายไสว พลทิแสง', NULL, 'Quality Control', 'หัวหน้าทีม', NULL, 1, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_S_027', 'S-027', 'นายเสถียน ใจกล้า', NULL, 'Quality Control', 'หัวหน้าทีม', NULL, 1, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_S_033', 'S-033', 'นายพอเจตน์ ใจบุญ', NULL, 'VSM1', 'หัวหน้าทีม', NULL, 1, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_S_035', 'S-035', 'นายประทาน นามวงษา', NULL, 'Quality Control', 'หัวหน้าทีม', NULL, 1, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_S_036', 'S-036', 'นายสมพร พรประไพ', NULL, 'VSM1', 'หัวหน้าทีม', NULL, 1, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_S_038', 'S-038', 'นายณรงค์ งิ้วเขียว', NULL, 'VSM4', 'หัวหน้าทีม', NULL, 1, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_S_040', 'S-040', 'นายชลธี สุวรรณไตรย์', NULL, 'Quality Control', 'หัวหน้าทีม', NULL, 1, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_S_041', 'S-041', 'นายสุทิน จันทร์ดี', NULL, 'VSM2', 'หัวหน้าทีม', NULL, 1, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_S_042', 'S-042', 'นายนิคม ปะเทสังข์', NULL, 'VSM1', 'หัวหน้าทีม', NULL, 1, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_S_043', 'S-043', 'นายสุวัลลภ ก้าวธรรม', NULL, 'VSM2', 'หัวหน้าทีม', NULL, 1, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_S_044', 'S-044', 'นายสมยศ แดงสูงเนิน', NULL, 'VSM3', 'หัวหน้าทีม', NULL, 1, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_S_046', 'S-046', 'นายสมศักดิ์ เครือลัดดา', NULL, 'VSM4', 'หัวหน้าทีม', NULL, 1, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_S_047', 'S-047', 'นายกำปั่น เจือจาน', NULL, 'VSM3', 'หัวหน้าทีม', NULL, 1, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_S_050', 'S-050', 'นายสิทธิพล หมอกมืด', NULL, 'VSM1', 'หัวหน้าทีม', NULL, 1, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_S_051', 'S-051', 'นายฐิติศักดิ์ ปรางมาศ', NULL, 'VSM3', 'หัวหน้าทีม', NULL, 1, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_S_053', 'S-053', 'นายภูเบศร์ เรือนไทย', NULL, 'VSM2', 'หัวหน้าทีม', NULL, 1, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_S_054', 'S-054', 'นายรังสรรค์ ดุลมา', NULL, 'Quality Control', 'หัวหน้าทีม', NULL, 1, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_S_055', 'S-055', 'นายวีรศักดิ์ สัตนาโค', NULL, 'VSM3', 'หัวหน้าทีม', NULL, 1, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_S_056', 'S-056', 'นายสุรชัย เจริญจิตต์', NULL, 'VSM3', 'หัวหน้าทีม', NULL, 1, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_S_059', 'S-059', 'นายเกรียงไกร โพธิ์ศรี', NULL, 'VSM4', 'หัวหน้าทีม', NULL, 1, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_S_060', 'S-060', 'นายอนุสรณ์ การรัตน์', NULL, 'VSM1', 'หัวหน้าทีม', NULL, 1, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_S_061', 'S-061', 'นายวิสันต์ กันนุฬา', NULL, 'VSM2', 'หัวหน้าทีม', NULL, 1, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_S_063', 'S-063', 'นายมนูน อินทร์โสภา', NULL, 'VSM2', 'หัวหน้าทีม', NULL, 1, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_S_064', 'S-064', 'นายบุญเลิศ สุขสมัย', NULL, 'VSM2', 'หัวหน้าทีม', NULL, 1, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_S_065', 'S-065', 'นายสัมฤทธิ์ ตอรัมย์', NULL, 'VSM3', 'หัวหน้าทีม', NULL, 1, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_S_067', 'S-067', 'นายจำเนียร ทาเทพ', NULL, 'VSM4', 'หัวหน้าทีม', NULL, 1, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_S_069', 'S-069', 'น.ส.อทิตยา ศรสิทธิ์', NULL, 'VSM3', 'ผู้ดูแลแผนก', NULL, 1, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_S_070', 'S-070', 'นายถาวร นิลผาพงษ์', NULL, 'Quality Control', 'หัวหน้าทีม', NULL, 1, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_S_071', 'S-071', 'ณรงค์ฤทธิ์ อินทิจันทร์', NULL, 'VSM4', 'หัวหน้าทีม', NULL, 1, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_T_188', 'T-188', 'นายเมธา ชมรุกข์', NULL, 'Quality Assurance', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_T_204', 'T-204', 'นายวิรัตน์ หวังชอบ', NULL, 'VSM4', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_T_235', 'T-235', 'นายภิญโญ รักษานนท์', NULL, 'Quality Assurance', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_T_317', 'T-317', 'นายคงกฤช จิตต์หลัง', NULL, 'Maintenance', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_T_329', 'T-329', 'นายสมนึก กลิ่นรื่น', NULL, 'VSM1', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_T_334', 'T-334', 'นายบัณฑิต ศรีสงคราม', NULL, 'VSM3', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_T_368', 'T-368', 'นายวันชัย จันทร์สว่าง', NULL, 'VSM3', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_T_384', 'T-384', 'นายมงคล กุศล', NULL, 'Quality Assurance', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_T_411', 'T-411', 'นายวิเชียร ศรีโยธา', NULL, 'Quality Assurance', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_T_441', 'T-441', 'นายธนาศักดิ์ สุกระวัน', NULL, 'VSM4', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_T_443', 'T-443', 'นายอภิเดช ฉวิกขุนรัมย์', NULL, 'Quality Assurance', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_T_544', 'T-544', 'นายเลิศวิทย์ เริ่มคิดการณ์', NULL, 'Quality Assurance', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_T_545', 'T-545', 'นายวีรเดช วงค์กองแก้ว', NULL, 'Quality Assurance', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_T_550', 'T-550', 'นายชลวุธ หมั่นนอก', NULL, 'Maintenance', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_T_570', 'T-570', 'นายประพันธ์ ทองพูน', NULL, 'Maintenance', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_T_571', 'T-571', 'นายสมยศ เอกจู', NULL, 'Maintenance', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_T_586', 'T-586', 'นายพงศธร วงษ์มณี', NULL, 'Quality Assurance', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_T_604', 'T-604', 'นายวาทิศ วินทไชย', NULL, 'Quality Control', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_T_629', 'T-629', 'นายทนงค์ ลิมสกุล', NULL, 'Maintenance', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_T_644', 'T-644', 'นายชัชวาลย์ เชื้อกลางใหญ่', NULL, 'VSM3', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_T_654', 'T-654', 'นายพฤฒิภัค พุ่มพฤกษ์', NULL, 'Quality Assurance', 'ผู้ดูแลแผนก', NULL, 1, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_T_692', 'T-692', 'นายกฤษณะ ปรินแคน', NULL, 'Quality Assurance', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_T_694', 'T-694', 'นายวันชัย ธรรมวงษี', NULL, 'Quality Assurance', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_T_699', 'T-699', 'นายอนุวัฒน์ มุกดา', NULL, 'Maintenance', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_T_700', 'T-700', 'นายนพพล ตามูล', NULL, 'Maintenance', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_T_706', 'T-706', 'นายคมกฤช บุญมา', NULL, 'Engineer', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_T_707', 'T-707', 'นายวสันต์ สาสอน', NULL, 'Maintenance', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_T_713', 'T-713', 'นายสุริยัน เกตุประยูร', NULL, 'Engineer', 'ผู้ดูแลแผนก', NULL, 1, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_T_725', 'T-725', 'นายมนตรี ผอบเพ็ชร', NULL, 'Maintenance', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_T_726', 'T-726', 'นายอนันต์ คุ้มทรัพย์', NULL, 'Maintenance', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_T_735', 'T-735', 'นายพินิจพันธ์ เพ่งพินิจ', NULL, 'Quality Assurance', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_T_737', 'T-737', 'นายชัยวัฒน์ กลยนี', NULL, 'Maintenance', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_T_738', 'T-738', 'นายสุธีรักษ์ เตยา', NULL, 'Process Engineer', 'ผู้ดูแลระบบ', NULL, 1, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_T_743', 'T-743', 'นายนพรัตน์ สาธุจรัญ', NULL, 'Quality Assurance', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_T_750', 'T-750', 'นายรัชต์พงษ์ บุญโชติ', NULL, 'Quality Assurance', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_T_751', 'T-751', 'นายบุญฤทธิ์ ชูสนุก', NULL, 'Process Engineer', 'ผู้ดูแลแผนก', NULL, 1, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_T_758', 'T-758', 'นายศตวรรษ วิจิตรวรฉัตร', NULL, 'Maintenance', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_T_776', 'T-776', 'นายกิตติ พันธ์คำเกิด', NULL, 'Quality Assurance', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_T_778', 'T-778', 'นายเพิ่มพล พลอยสุวรรณ์', NULL, 'Maintenance', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_T_783', 'T-783', 'นายกิตติธร ทรัพย์ช่วย', NULL, 'Maintenance', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_T_786', 'T-786', 'นายอนุวัฒน์ ศรีสุวรรณชัย', NULL, 'Maintenance', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_T_787', 'T-787', 'นายภูวดล ดงอนนท์', NULL, 'Maintenance', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_T_791', 'T-791', 'นายมณูศักดิ์ คำค้อ', NULL, 'Maintenance', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_T_792', 'T-792', 'นายณัฐพงษ์ รูปสิงห์', NULL, 'Maintenance', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_T_793', 'T-793', 'นายสุทิน ใสนวน', NULL, 'Maintenance', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_T_795', 'T-795', 'นายเพชร ครองชื่น', NULL, 'Maintenance', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_T_797', 'T-797', 'นายชัยยุทธ น้อมกลาง', NULL, 'Quality Assurance', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_T_798', 'T-798', 'นายชัยสิทธิ์ ด้วงกัน', NULL, 'Process Engineer', 'ผู้ดูแลระบบ', NULL, 1, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_T_801', 'T-801', 'นายอภินิชย์ ลุนสิน', NULL, 'Maintenance', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_T_802', 'T-802', 'นายชนาพร ทองจิตร', NULL, 'Maintenance', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_T_804', 'T-804', 'นายณัฐปกรณ์ แสงทอง', NULL, 'Maintenance', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_T_805', 'T-805', 'นายณัฐนันท์ วงศ์เครือศร', NULL, 'Maintenance', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_T_806', 'T-806', 'นายถิรวัฒน์ ไชยพันธ์', NULL, 'Maintenance', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_T_807', 'T-807', 'นายณัฐพงษ์ สอนนนฐี', NULL, 'Maintenance', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_T_808', 'T-808', 'นายกิติพันธ์ ดุลแสง', NULL, 'Maintenance', 'ผู้ดูแลแผนก', NULL, 1, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_T_809', 'T-809', 'นายอนุชา อุ้มหอบ', NULL, 'Maintenance', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_T_812', 'T-812', 'นายกรินทร์ เครือทอง', NULL, 'Quality Assurance', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_T_813', 'T-813', 'น.ส.ศันสนีย์ ดวงจินดา', NULL, 'Quality Assurance', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_T_814', 'T-814', 'นายพรชัย ครองใจ', NULL, 'VSM3', 'พนักงาน', NULL, 1, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_T_815', 'T-815', 'นายวิภาวัส จันทะคาม', NULL, 'VSM4', 'ผู้ดูแลระบบ', NULL, 1, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_T_816', 'T-816', 'ภาสกร อิ่มบูรณาประวัติ', NULL, 'VSM1', 'หัวหน้าทีม', NULL, 1, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('mgr_Temp117', 'Temp117', 'นายคมกริช มุ่งงาม', NULL, 'VSM4', 'พนักงาน', NULL, 0, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));

@@ -168,6 +168,22 @@ export function uid(prefix = 'id') {
   return `${prefix}_${rand}${time}`;
 }
 
+/**
+ * ทำรหัสพนักงานให้อยู่ในรูปมาตรฐานก่อนเทียบ — ตรงกับ normalizeCode() ของ frontend
+ *
+ * รหัสจริงมีขีดกลางและตัวพิมพ์ใหญ่ (T-815 · PST742) แต่คนพิมพ์บนมือถือมักได้ 't815'
+ * ถ้าเทียบตรง ๆ จะเข้าระบบไม่ได้ทั้งที่รหัสถูก · ตรวจแล้วว่ารหัสทั้งชุดไม่ชนกัน
+ */
+export function normalizeCode(code) {
+  return String(code ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+/**
+ * นิพจน์ SQL ที่ให้ผลเดียวกับ normalizeCode() — ใช้เทียบรหัสฝั่งฐานข้อมูล
+ * ตารางมีไม่กี่ร้อยแถว การสแกนเต็มตารางจึงไม่ใช่ปัญหา
+ */
+export const normalizedSql = (col) => `UPPER(REPLACE(REPLACE(${col}, '-', ''), ' ', ''))`;
+
 /** เวลาปัจจุบันแบบ ISO 8601 UTC — ตรงกับ nowStamp() ของ frontend */
 export function nowStamp() {
   return new Date().toISOString();

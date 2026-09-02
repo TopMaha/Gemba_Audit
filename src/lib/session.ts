@@ -53,11 +53,16 @@ export function startSession(m: Manager): Session {
   return s;
 }
 
-/** ซิงก์ค่าสิทธิ์ล่าสุดจากฐานข้อมูล (Admin แก้แล้วต้องมีผลทันที) */
+/**
+ * ซิงก์ค่าสิทธิ์ล่าสุดจากฐานข้อมูล (Admin แก้แล้วต้องมีผลทันที)
+ *
+ * ถูกเตะออกเมื่อ: ถูกลบออกจากทะเบียน · ปิดบัญชี (ลาออก) · ถูกถอนสิทธิ์เข้าใช้งาน
+ * ทั้งสามกรณีต้องออกจากระบบทันที ไม่ใช่รอให้เซสชันหมดอายุ
+ */
 export function syncSession(m: Manager | undefined): 'ok' | 'kicked' {
   const s = getSession();
   if (!s) return 'ok';
-  if (!m || !m.is_active) {
+  if (!m || !m.is_active || !m.can_login) {
     endSession();
     return 'kicked';
   }

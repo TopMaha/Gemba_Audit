@@ -18,7 +18,16 @@
 
 
 -- ── ผู้ใช้ ────────────────────────────────────────────────────────────────
--- ผู้จัดการ/หัวหน้างานที่เป็นคนเดิน Gemba (เข้าระบบด้วย manager_code)
+-- ทะเบียนพนักงานทั้งโรงงาน ไม่ใช่ทุกคนที่ล็อกอินได้ (ดู can_login)
+-- คนที่ล็อกอินไม่ได้ยังต้องอยู่ในตารางนี้ เพราะถูกเลือกเป็นผู้ร่วมเดินได้
+--
+-- ธงสามตัวนี้ตอบคนละคำถาม อย่ายุบรวมกัน
+--   is_active         ยังเป็นพนักงานอยู่ไหม (ลาออกแล้วปิด)
+--   can_login         ได้รับสิทธิ์ใช้แอปนี้หรือไม่ — ผู้ดูแลระบบกำหนดรายคน
+--   dashboard_enabled เห็นภาพรวมทั้งโรงงานได้หรือเห็นแค่ของตัวเอง
+--
+-- can_login ตั้งต้นเป็น 0 โดยตั้งใจ: คนใหม่ที่เพิ่มเข้ามาต้องถูก "เปิดสิทธิ์"
+-- ก่อนเสมอ เพราะรหัสเข้าระบบคือรหัสพนักงานซึ่งคนอื่นเดาได้ไม่ยาก
 CREATE TABLE IF NOT EXISTS managers (
   id                TEXT PRIMARY KEY,
   manager_code      TEXT NOT NULL UNIQUE,
@@ -29,6 +38,7 @@ CREATE TABLE IF NOT EXISTS managers (
   avatar_url        TEXT,
   is_active         INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
   dashboard_enabled INTEGER NOT NULL DEFAULT 1 CHECK (dashboard_enabled IN (0, 1)),
+  can_login         INTEGER NOT NULL DEFAULT 0 CHECK (can_login IN (0, 1)),
   created_at        TEXT NOT NULL
 );
 

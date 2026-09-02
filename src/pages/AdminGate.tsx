@@ -52,10 +52,12 @@ export default function AdminGate() {
           <Input
             autoFocus
             type="password"
-            inputMode="numeric"
+            autoCapitalize="characters"
+            autoCorrect="off"
+            spellCheck={false}
             value={code}
             onChange={(e) => (setCode(e.target.value), setError(null))}
-            className="num h-14 text-center text-2xl tracking-[0.35em]"
+            className="num h-14 text-center text-2xl tracking-[0.2em]"
           />
           {error ? <p className="mt-2 text-[12px] text-bad">{error}</p> : null}
 
@@ -64,7 +66,6 @@ export default function AdminGate() {
             {busy ? t('common.loading') : t('auth.signIn')}
           </Button>
 
-          <p className="num mt-4 text-center text-[11px] text-muted-foreground">{t('auth.demoAdmin')}</p>
         </form>
       </div>
     </div>

@@ -1,5 +1,9 @@
 import type { ISODate } from './time';
 
+/**
+ * ทะเบียนพนักงาน — ไม่ใช่ทุกคนที่ล็อกอินได้ (ดู can_login)
+ * คนที่ล็อกอินไม่ได้ยังต้องอยู่ในทะเบียน เพราะถูกเลือกเป็น "ผู้ร่วมเดิน" ได้
+ */
 export interface Manager {
   id: string;
   manager_code: string;
@@ -8,8 +12,12 @@ export interface Manager {
   department: string;
   position?: string;
   avatar_url?: string | null;
+  /** ยังเป็นพนักงานอยู่ไหม — ลาออกแล้วปิด */
   is_active: boolean;
+  /** เห็นภาพรวมทั้งโรงงาน หรือเห็นแค่ของตัวเอง */
   dashboard_enabled: boolean;
+  /** ได้รับสิทธิ์เข้าใช้แอปหรือไม่ — ผู้ดูแลระบบกำหนดเป็นรายคน */
+  can_login: boolean;
   created_at: string;
 }
 

@@ -10,13 +10,23 @@ import type { Db } from './types';
  *   แก้เฉพาะไฟล์นี้กับ api.ts ให้ยิง HTTP แทน — ส่วนหน้าจอไม่ต้องแก้
  */
 
-const KEY = 'gemba.db.v1';
+/**
+ * v2 = ขึ้นระบบจริง ทะเบียนพนักงานจาก PSIF ไม่มีข้อมูลตัวอย่างแล้ว
+ * v3 = เพิ่มสิทธิ์เข้าใช้งานรายคน (can_login) — สำเนาชุด v2 ไม่มีฟิลด์นี้
+ *      ถ้าไม่ขึ้นเวอร์ชัน เครื่องที่ค้าง v2 จะอ่านได้เป็น undefined แล้วล็อกอินไม่ได้ทั้งหมด
+ *
+ * การเปลี่ยนเลขนี้ทำให้เครื่องที่ยังค้างสำเนาชุดเก่าเริ่มใหม่จากทะเบียนตั้งต้น
+ */
+const KEY = 'gemba.db.v3';
+const LEGACY_KEYS = ['gemba.db.v1', 'gemba.db.v2'];
 const LATENCY = 90; // จำลองดีเลย์เครือข่าย เพื่อให้เห็น loading state จริง
 
 let cache: Db | null = null;
 const listeners = new Set<() => void>();
 
 function fresh(): Db {
+  // ทิ้งข้อมูลตัวอย่างชุดเก่าที่ยังค้างอยู่ในเครื่อง ไม่งั้นกินพื้นที่ไปเปล่า ๆ
+  for (const k of LEGACY_KEYS) localStorage.removeItem(k);
   const db = buildSeedDb();
   localStorage.setItem(KEY, JSON.stringify(db));
   return db;
@@ -67,7 +77,7 @@ export function subscribe(fn: () => void) {
   return () => listeners.delete(fn);
 }
 
-/** ล้างข้อมูลทั้งหมดแล้วสร้างข้อมูลตัวอย่างใหม่ */
+/** ล้างสำเนาในเครื่องแล้วเริ่มใหม่จากทะเบียนตั้งต้น (ไม่กระทบข้อมูลบนเซิร์ฟเวอร์) */
 export async function resetDb() {
   localStorage.removeItem(KEY);
   cache = null;

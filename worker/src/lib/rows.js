@@ -34,6 +34,7 @@ export function mapManager(r) {
     avatar_url: r.avatar_url ?? null,
     is_active: toBool(r.is_active),
     dashboard_enabled: toBool(r.dashboard_enabled),
+    can_login: toBool(r.can_login),
     created_at: r.created_at,
   };
 }

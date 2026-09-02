@@ -4,7 +4,7 @@ import { apiPost } from './net';
 import { enqueue, type QueueKind } from './queue';
 import { refreshPending, syncNow } from './sync';
 import { nowStamp, todayISO, type ISODate } from './time';
-import { uid } from './utils';
+import { normalizeCode, uid } from './utils';
 import type {
   Area,
   AppSettings,
@@ -50,31 +50,40 @@ async function queueWrite(kind: QueueKind, localId: string, payload: unknown) {
 
 /** ── การเข้าสู่ระบบ ─────────────────────────────────────── */
 
-export async function loginManager(code: string): Promise<{ manager?: Manager; error?: 'not_found' | 'inactive' }> {
+export type LoginError = 'not_found' | 'inactive' | 'no_access';
+
+export async function loginManager(code: string): Promise<{ manager?: Manager; error?: LoginError }> {
   // ตรวจกับสำเนาในเครื่อง เพื่อให้เข้าระบบได้แม้เน็ตไม่ถึง
   // แล้วแจ้งเซิร์ฟเวอร์แบบไม่รอผล ประวัติการเข้าระบบฝั่งเซิร์ฟเวอร์จะได้ครบ
+  //
+  // สำเนาในเครื่องถูกทับด้วยข้อมูลจากเซิร์ฟเวอร์ทุกรอบซิงก์ การถอนสิทธิ์จึงมีผลตามมา
+  // ภายในรอบซิงก์ถัดไป และ useSessionGuard จะเตะออกจากระบบให้ทันทีที่รู้
   if (ONLINE_MODE) void apiPost('/api/auth/login', { code: code.trim() }).catch(() => {});
+  const wanted = normalizeCode(code);
   return mutate((db) => {
-    const m = db.managers.find((x) => x.manager_code === code.trim());
+    const m = db.managers.find((x) => normalizeCode(x.manager_code) === wanted);
+    const granted = Boolean(m) && m!.is_active && m!.can_login;
     const log: LoginHistory = {
       id: uid('log'),
       actor_id: m?.id ?? '-',
       actor_name: m?.full_name ?? code,
       role: 'manager',
       at: nowStamp(),
-      result: m && m.is_active ? 'success' : 'failed',
+      result: granted ? 'success' : 'failed',
     };
     db.login_history.unshift(log);
     if (!m) return { error: 'not_found' as const };
     if (!m.is_active) return { error: 'inactive' as const };
+    if (!m.can_login) return { error: 'no_access' as const };
     return { manager: m };
   });
 }
 
 export async function loginAdmin(code: string): Promise<Superuser | null> {
   if (ONLINE_MODE) void apiPost('/api/auth/admin', { code: code.trim() }).catch(() => {});
+  const wanted = normalizeCode(code);
   return mutate((db) => {
-    const su = db.superusers.find((s) => s.admin_code === code.trim()) ?? null;
+    const su = db.superusers.find((s) => normalizeCode(s.admin_code) === wanted) ?? null;
     db.login_history.unshift({
       id: uid('log'),
       actor_id: su?.id ?? '-',
@@ -121,6 +130,8 @@ export async function saveManager(input: Partial<Manager> & { id?: string }, act
       avatar_url: input.avatar_url ?? null,
       is_active: input.is_active ?? true,
       dashboard_enabled: input.dashboard_enabled ?? true,
+      // คนที่เพิ่มใหม่ยังล็อกอินไม่ได้จนกว่าจะเปิดสิทธิ์ให้ — ตรงกับฝั่ง Worker
+      can_login: input.can_login ?? false,
       created_at: nowStamp(),
     };
     db.managers.push(created);
@@ -138,6 +149,7 @@ export async function saveManager(input: Partial<Manager> & { id?: string }, act
     avatar_url: saved.avatar_url,
     is_active: saved.is_active,
     dashboard_enabled: saved.dashboard_enabled,
+    can_login: saved.can_login,
   });
   return saved;
 }

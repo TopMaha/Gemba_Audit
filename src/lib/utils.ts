@@ -9,19 +9,34 @@ export function uid(prefix = 'id'): string {
   return `${prefix}_${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36).slice(-4)}`;
 }
 
+/**
+ * คำนำหน้าชื่อ — ต้องตัดทิ้งก่อนย่อชื่อ ไม่งั้นวงกลมย่อชื่อจะขึ้น "น" เหมือนกันเกือบทุกคน
+ * เรียงจากยาวไปสั้น เพราะ "นางสาว" ต้องถูกจับก่อน "นาง"
+ */
+const TITLES = ['ว่าที่ ร.ต.', 'ว่าที่ร.ต.', 'นางสาว', 'น.ส.', 'นาย', 'นาง', 'ด.ช.', 'ด.ญ.', 'Mr.', 'Mrs.', 'Ms.'];
+
 export function initials(name: string): string {
-  const parts = name.trim().split(/\s+/);
+  let clean = name.trim();
+  for (const t of TITLES) {
+    if (clean.startsWith(t)) {
+      clean = clean.slice(t.length).trim();
+      break;
+    }
+  }
+  const parts = (clean || name.trim()).split(/\s+/);
   if (parts.length === 1) return parts[0].slice(0, 2);
   return (parts[0][0] ?? '') + (parts[1][0] ?? '');
 }
 
-/** สุ่มแบบ deterministic (seeded) เพื่อให้ข้อมูลตัวอย่างเหมือนเดิมทุกครั้ง */
-export function seededRandom(seed: number) {
-  let s = seed >>> 0;
-  return () => {
-    s = (s * 1664525 + 1013904223) >>> 0;
-    return s / 4294967296;
-  };
+/**
+ * ทำรหัสให้อยู่ในรูปมาตรฐานก่อนเทียบ
+ *
+ * รหัสพนักงานมีขีดกลางและตัวพิมพ์ใหญ่ (T-815 · PST742) แต่คนหน้างานพิมพ์บนมือถือ
+ * มักได้ 't815' หรือ 't 815' ออกมา ถ้าเทียบตรง ๆ จะเข้าระบบไม่ได้ทั้งที่รหัสถูก
+ * ตรวจแล้วว่ารหัสทั้ง 393 ตัวไม่ชนกันเลยเมื่อตัดขีดกลางและตัวพิมพ์ออก
+ */
+export function normalizeCode(code: string): string {
+  return code.toUpperCase().replace(/[^A-Z0-9]/g, '');
 }
 
 export function clamp(n: number, min: number, max: number) {
