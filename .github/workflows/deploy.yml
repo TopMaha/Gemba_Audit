@@ -37,7 +37,32 @@ jobs:
       - name: ตรวจชนิดข้อมูล
         run: npm run lint
 
+      # ถ้าไม่มี secret แล้วปล่อยให้ build ผ่าน จะได้แอปที่ดูเหมือนใช้งานได้ปกติ
+      # แต่จริง ๆ ไม่ต่อฐานข้อมูลเลย (ใช้ข้อมูลตั้งต้นในเครื่องแทน) ซึ่งจับได้ยาก
+      # เพราะหน้าจอขึ้นครบทุกอย่าง จึงให้ล้มตั้งแต่ตรงนี้พร้อมบอกวิธีแก้
+      - name: ตรวจว่ามี secret ครบก่อน build
+        env:
+          VITE_API_URL: ${{ secrets.VITE_API_URL }}
+          VITE_AUTH_TOKEN: ${{ secrets.VITE_AUTH_TOKEN }}
+        run: |
+          missing=""
+          if [ -z "$VITE_API_URL" ]; then missing="$missing VITE_API_URL"; fi
+          if [ -z "$VITE_AUTH_TOKEN" ]; then missing="$missing VITE_AUTH_TOKEN"; fi
+          if [ -n "$missing" ]; then
+            echo "::error::ยังไม่ได้ตั้ง secret:$missing"
+            echo "ตั้งที่ Settings -> Secrets and variables -> Actions ของ repo นี้"
+            echo "ค่าต้องตรงกับ .env.local ที่ใช้ deploy ขึ้น Cloudflare Pages"
+            exit 1
+          fi
+
+      # ⚠️ VITE_* ถูกฝังลงไฟล์ JS ตอน build ผู้ใช้ที่เปิดหน้าเว็บจึงอ่านโทเคนได้
+      #    เป็นข้อจำกัดเดิมของการยืนยันตัวตนแบบเบาที่โปรเจกต์นี้เลือกใช้
+      #    ตัวโทเคนนี้เปิดได้แค่การอ่านข้อมูลกับงานประจำวัน ไม่ได้เปิดสิทธิ์ผู้ดูแล
+      #    เพราะงานแอดมินต้องมี X-Admin-Token จากตาราง admin_sessions อีกชั้น
       - name: Build (base = /Gemba_Audit/ เพราะ Pages เสิร์ฟใต้ subpath ของชื่อ repo)
+        env:
+          VITE_API_URL: ${{ secrets.VITE_API_URL }}
+          VITE_AUTH_TOKEN: ${{ secrets.VITE_AUTH_TOKEN }}
         run: npm run build:ghpages
 
       # GitHub Pages ไม่มีไฟล์ _redirects แบบ Cloudflare
