@@ -20,7 +20,7 @@ import {
   oneOf, qDate, qInt, readJson, str, strArray, todayBangkok, uid,
 } from './lib/http.js';
 import {
-  FOCUS_SELECT, PLAN_SELECT, RECORD_SELECT,
+  FOCUS_SELECT, PLAN_SELECT, RECORD_SELECT, daysFromMask, maskFromDays,
   mapArea, mapChange, mapFocus, mapLogin, mapManager, mapPlan, mapRecord, mapSettings, mapTheme,
 } from './lib/rows.js';
 import { createAdminSession, readAdminSession, revokeAdminSession } from './lib/admin.js';
@@ -41,6 +41,19 @@ function clientId(b, prefix) {
   }
   return b.id;
 }
+
+/** วันประจำที่ต้องเดิน: อาร์เรย์ของเลขวัน 0 (อาทิตย์) – 6 (เสาร์) → bitmask สำหรับเก็บลงฐาน */
+function weekdayMask(b, field) {
+  const v = b[field];
+  if (v === undefined || v === null) return 0;
+  if (!Array.isArray(v) || v.some((d) => !Number.isInteger(d) || d < 0 || d > 6)) {
+    throw new BadInput(field, 'ต้องเป็นอาร์เรย์ของเลขวัน 0 (อาทิตย์) ถึง 6 (เสาร์)');
+  }
+  return maskFromDays([...new Set(v)]);
+}
+
+/** แปลงวันประจำให้อ่านออกในประวัติการแก้ไข (แทนที่จะเห็นเป็นตัวเลข bitmask) */
+const withReadableDays = (row) => ({ ...row, walk_days: daysFromMask(row.walk_days).join(',') });
 
 /** สร้างซ้ำด้วย id เดิม = คิวส่งซ้ำ ให้ถือว่าสำเร็จและคืนของเดิมกลับไป */
 function isDuplicate(e) {
@@ -298,17 +311,20 @@ app.post('/api/managers', async (c) => {
     dashboard_enabled: bool(b, 'dashboard_enabled', { fallback: true }) ? 1 : 0,
     // คนที่เพิ่มใหม่ยังล็อกอินไม่ได้จนกว่าผู้ดูแลระบบจะเปิดสิทธิ์ให้
     can_login: bool(b, 'can_login', { fallback: false }) ? 1 : 0,
+    is_walker: bool(b, 'is_walker', { fallback: false }) ? 1 : 0,
+    walk_days: weekdayMask(b, 'walk_days'),
     created_at: nowStamp(),
   };
 
   await c.env.DB.batch([
     c.env.DB.prepare(
       `INSERT INTO managers (id, manager_code, full_name, full_name_en, department, position,
-                             avatar_url, is_active, dashboard_enabled, can_login, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                             avatar_url, is_active, dashboard_enabled, can_login, is_walker, walk_days, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).bind(
       row.id, row.manager_code, row.full_name, row.full_name_en, row.department,
-      row.position, row.avatar_url, row.is_active, row.dashboard_enabled, row.can_login, row.created_at,
+      row.position, row.avatar_url, row.is_active, row.dashboard_enabled, row.can_login,
+      row.is_walker, row.walk_days, row.created_at,
     ),
     entryStmt(c.env.DB, {
       table: 'managers', recordId: row.id, action: 'create',
@@ -336,19 +352,25 @@ app.put('/api/managers/:id', async (c) => {
     is_active: 'is_active' in b ? (bool(b, 'is_active') ? 1 : 0) : before.is_active,
     dashboard_enabled: 'dashboard_enabled' in b ? (bool(b, 'dashboard_enabled') ? 1 : 0) : before.dashboard_enabled,
     can_login: 'can_login' in b ? (bool(b, 'can_login') ? 1 : 0) : before.can_login,
+    is_walker: 'is_walker' in b ? (bool(b, 'is_walker') ? 1 : 0) : before.is_walker,
+    walk_days: 'walk_days' in b ? weekdayMask(b, 'walk_days') : before.walk_days,
   };
 
   await c.env.DB.batch([
     c.env.DB.prepare(
       `UPDATE managers SET manager_code = ?, full_name = ?, full_name_en = ?, department = ?,
                            position = ?, avatar_url = ?, is_active = ?, dashboard_enabled = ?,
-                           can_login = ?
+                           can_login = ?, is_walker = ?, walk_days = ?
         WHERE id = ?`,
     ).bind(
       next.manager_code, next.full_name, next.full_name_en, next.department,
-      next.position, next.avatar_url, next.is_active, next.dashboard_enabled, next.can_login, id,
+      next.position, next.avatar_url, next.is_active, next.dashboard_enabled, next.can_login,
+      next.is_walker, next.walk_days, id,
     ),
-    ...diffStmts(c.env.DB, { table: 'managers', recordId: id, before, after: next, actor: actorName(c) }),
+    ...diffStmts(c.env.DB, {
+      table: 'managers', recordId: id,
+      before: withReadableDays(before), after: withReadableDays(next), actor: actorName(c),
+    }),
   ]);
 
   const saved = await c.env.DB.prepare(`SELECT * FROM managers WHERE id = ?`).bind(id).first();
@@ -494,12 +516,25 @@ app.put('/api/settings', async (c) => {
     recent_visit_days: 'recent_visit_days' in b ? int(b, 'recent_visit_days', { min: 0, max: 365 }) : before.recent_visit_days,
     company_name: 'company_name' in b ? str(b, 'company_name', { required: false, max: 200 }) : before.company_name,
     plant_name: 'plant_name' in b ? str(b, 'plant_name', { required: false, max: 200 }) : before.plant_name,
+    issue_owner_id: 'issue_owner_id' in b
+      ? str(b, 'issue_owner_id', { required: false, max: 60, fallback: null })
+      : before.issue_owner_id,
   };
 
+  // ผู้รับเรื่องต้องมีตัวตนและเข้าระบบได้จริง ไม่งั้นปัญหาที่เด้งเข้ามาจะไม่มีใครเห็น
+  if (next.issue_owner_id && next.issue_owner_id !== before.issue_owner_id) {
+    const owner = await c.env.DB.prepare(`SELECT 1 FROM managers WHERE id = ? AND is_active = 1 AND can_login = 1`)
+      .bind(next.issue_owner_id)
+      .first();
+    if (!owner) throw new BadInput('issue_owner_id', 'ผู้รับเรื่องต้องเป็นผู้ใช้ที่ยังทำงานอยู่และเข้าระบบได้');
+  }
+
   await c.env.DB.prepare(
-    `UPDATE app_settings SET weekly_target = ?, recent_visit_days = ?, company_name = ?, plant_name = ? WHERE id = 1`,
+    `UPDATE app_settings SET weekly_target = ?, recent_visit_days = ?, company_name = ?, plant_name = ?,
+                             issue_owner_id = ?
+      WHERE id = 1`,
   )
-    .bind(next.weekly_target, next.recent_visit_days, next.company_name, next.plant_name)
+    .bind(next.weekly_target, next.recent_visit_days, next.company_name, next.plant_name, next.issue_owner_id)
     .run();
 
   return ok(c, mapSettings({ ...before, ...next }));
@@ -713,6 +748,9 @@ function readRecordInput(b, base = null) {
     ci_required: pick('ci_required', () => bool(b, 'ci_required')),
     ci_ticket_no: pick('ci_ticket_no', () => str(b, 'ci_ticket_no', { required: false, max: 100 })),
     ci_ticket_link: pick('ci_ticket_link', () => str(b, 'ci_ticket_link', { required: false, max: 1000 })),
+    issue_status: pick('issue_status', () =>
+      oneOf(b, 'issue_status', ['open', 'acknowledged', 'closed'], { required: false, fallback: 'open' })),
+    issue_response: pick('issue_response', () => str(b, 'issue_response', { required: false, max: 2000 })),
     theme_ids: pick('theme_ids', () => strArray(b, 'theme_ids', { required: true, maxItems: 3, maxLen: 60 })),
     photo_urls: pick('photo_urls', () => strArray(b, 'photo_urls', { maxItems: 20, maxLen: 300 })),
     participant_names: pick('participant_names', () => strArray(b, 'participant_names', { maxItems: 30, maxLen: 200 })),
@@ -747,12 +785,14 @@ app.post('/api/records', async (c) => {
     c.env.DB.prepare(
       `INSERT INTO gemba_walk_records
          (id, plan_id, manager_id, actual_date, actual_time, actual_area_id, observation,
-          has_issue, issue_summary, ci_required, ci_ticket_no, ci_ticket_link, completed_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          has_issue, issue_summary, ci_required, ci_ticket_no, ci_ticket_link,
+          issue_status, issue_response, completed_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).bind(
       id, input.plan_id, input.manager_id, input.actual_date, input.actual_time, input.actual_area_id,
       input.observation, input.has_issue ? 1 : 0, input.issue_summary,
-      input.ci_required ? 1 : 0, input.ci_ticket_no, input.ci_ticket_link, nowStamp(),
+      input.ci_required ? 1 : 0, input.ci_ticket_no, input.ci_ticket_link,
+      input.issue_status, input.issue_response, nowStamp(),
     ),
     ...childStmts(c.env.DB, id, input),
     entryStmt(c.env.DB, {
@@ -791,12 +831,14 @@ app.put('/api/records/:id', async (c) => {
     c.env.DB.prepare(
       `UPDATE gemba_walk_records
           SET manager_id = ?, actual_date = ?, actual_time = ?, actual_area_id = ?, observation = ?,
-              has_issue = ?, issue_summary = ?, ci_required = ?, ci_ticket_no = ?, ci_ticket_link = ?
+              has_issue = ?, issue_summary = ?, ci_required = ?, ci_ticket_no = ?, ci_ticket_link = ?,
+              issue_status = ?, issue_response = ?
         WHERE id = ?`,
     ).bind(
       input.manager_id, input.actual_date, input.actual_time, input.actual_area_id, input.observation,
       input.has_issue ? 1 : 0, input.issue_summary,
-      input.ci_required ? 1 : 0, input.ci_ticket_no, input.ci_ticket_link, id,
+      input.ci_required ? 1 : 0, input.ci_ticket_no, input.ci_ticket_link,
+      input.issue_status, input.issue_response, id,
     ),
   ];
 
@@ -863,16 +905,16 @@ app.put('/api/records/:id', async (c) => {
    ประเด็นที่พบ + ร่องรอยการแก้ไข
    ══════════════════════════════════════════════════════════════════════════ */
 
-/** ประเด็นที่ยังไม่ได้เปิดใบงานแก้ไข — เรียงจากเก่าสุดก่อน เพราะค้างนานสุด */
+/** ประเด็นที่จุดรวมยังไม่ปิด — เรียงจากเก่าสุดก่อน เพราะค้างนานสุด */
 app.get('/api/issues/open', async (c) => {
   const limit = qInt(c, 'limit', 100, { min: 1, max: 500 });
   const { results } = await c.env.DB.prepare(
-    `SELECT r.id, r.actual_date, r.issue_summary, r.ci_required, r.ci_ticket_no,
+    `SELECT r.id, r.actual_date, r.issue_summary, r.issue_status, r.ci_required, r.ci_ticket_no,
             m.full_name AS manager_name, a.area_name
        FROM gemba_walk_records r
        JOIN managers m ON m.id = r.manager_id
        JOIN areas a ON a.id = r.actual_area_id
-      WHERE r.has_issue = 1 AND (r.ci_ticket_no IS NULL OR r.ci_ticket_no = '')
+      WHERE r.has_issue = 1 AND r.issue_status <> 'closed'
       ORDER BY r.actual_date ASC
       LIMIT ?`,
   ).bind(limit).all();
@@ -881,6 +923,7 @@ app.get('/api/issues/open', async (c) => {
     record_id: r.id,
     actual_date: r.actual_date,
     issue_summary: r.issue_summary,
+    issue_status: r.issue_status,
     ci_required: r.ci_required === 1,
     manager_name: r.manager_name,
     area_name: r.area_name,

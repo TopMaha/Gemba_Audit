@@ -211,6 +211,8 @@ export async function saveManager(input: Partial<Manager> & { id?: string }, act
       dashboard_enabled: input.dashboard_enabled ?? true,
       // คนที่เพิ่มใหม่ยังล็อกอินไม่ได้จนกว่าจะเปิดสิทธิ์ให้ — ตรงกับฝั่ง Worker
       can_login: input.can_login ?? false,
+      is_walker: input.is_walker ?? false,
+      walk_days: input.walk_days ?? [],
       created_at: nowStamp(),
     };
     db.managers.push(created);
@@ -229,6 +231,8 @@ export async function saveManager(input: Partial<Manager> & { id?: string }, act
     is_active: saved.is_active,
     dashboard_enabled: saved.dashboard_enabled,
     can_login: saved.can_login,
+    is_walker: saved.is_walker,
+    walk_days: saved.walk_days,
   });
   return saved;
 }
@@ -437,6 +441,9 @@ export async function createRecord(input: RecordInput, actor: string): Promise<W
       ci_required: input.ci_required ?? false,
       ci_ticket_no: input.ci_ticket_no ?? '',
       ci_ticket_link: input.ci_ticket_link ?? '',
+      // พบปัญหา = ส่งเข้าจุดรวมทันทีในสถานะ "รอดำเนินการ"
+      issue_status: 'open',
+      issue_response: '',
       completed_at: nowStamp(),
     };
     db.gemba_walk_records.push(created);
@@ -465,6 +472,8 @@ export async function createRecord(input: RecordInput, actor: string): Promise<W
     ci_required: created.ci_required,
     ci_ticket_no: created.ci_ticket_no,
     ci_ticket_link: created.ci_ticket_link,
+    issue_status: created.issue_status,
+    issue_response: created.issue_response,
   });
   return created;
 }

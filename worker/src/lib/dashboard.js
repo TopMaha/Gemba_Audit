@@ -6,13 +6,27 @@
  * สูตรตรงกับ src/lib/calc.ts ของ frontend
  *   Adherence %  = แผนที่เดินแล้ว ÷ แผนที่ถึงกำหนดแล้ว × 100
  *                  (ไม่นับแผนที่ยกเลิก และไม่นับแผนที่ยังไม่ถึงกำหนด)
- *   Completion % = คนที่เดินหัวข้อนั้น (ไม่ซ้ำ) ÷ พนักงาน Active ทั้งหมด × 100
+ *   Completion % = ผู้ต้องเดินที่เดินหัวข้อนั้น (ไม่ซ้ำ) ÷ ผู้ต้องเดินทั้งหมด × 100
+ *                  ผู้ต้องเดิน = is_walker = 1 · ถ้ายังไม่กำหนดใครเลยใช้ทุกคนที่ can_login = 1
+ *                  (ตรงกับ pickWalkers() ใน calc.ts — ไม่ใช้พนักงานทั้งโรงงานเป็นตัวหาร)
  *   ทุกเปอร์เซ็นต์ปัดลง (floor) ตามสเปก — 17/30 = 56%
  */
 
 import { todayBangkok } from './http.js';
 
 const pct = (a, b) => (b > 0 ? Math.floor((a / b) * 100) : 0);
+
+/**
+ * เงื่อนไข SQL ของ "ผู้ต้องเดิน" — ใช้ร่วมกันทุกจุดเพื่อให้ตัวหารกับตัวตั้งเป็นกลุ่มเดียวกัน
+ * มีคนถูกกำหนดแล้วอย่างน้อยหนึ่งคน = ใช้เฉพาะคนที่กำหนด · ยังไม่มีเลย = ใช้ทุกคนที่เข้าระบบได้
+ */
+const WALKER_SQL = `
+  SELECT id FROM managers
+   WHERE is_active = 1
+     AND CASE WHEN EXISTS (SELECT 1 FROM managers WHERE is_active = 1 AND is_walker = 1)
+              THEN is_walker = 1
+              ELSE can_login = 1
+         END`;
 
 export async function buildSummary(db, from, to) {
   const asOf = todayBangkok();
@@ -32,13 +46,14 @@ export async function buildSummary(db, from, to) {
       .bind(from, to, asOf)
       .first(),
 
-    db.prepare(`SELECT COUNT(*) AS n FROM managers WHERE is_active = 1`).first(),
+    db.prepare(`SELECT COUNT(*) AS n FROM (${WALKER_SQL})`).first(),
 
     db
       .prepare(
         `SELECT COUNT(*) AS walks,
                 COUNT(DISTINCT manager_id) AS walkers,
                 SUM(CASE WHEN has_issue = 1 THEN 1 ELSE 0 END) AS issues,
+                SUM(CASE WHEN has_issue = 1 AND issue_status <> 'closed' THEN 1 ELSE 0 END) AS open_issues,
                 SUM(CASE WHEN plan_id IS NULL THEN 1 ELSE 0 END) AS adhoc
            FROM gemba_walk_records
           WHERE actual_date BETWEEN ? AND ?`,
@@ -47,7 +62,7 @@ export async function buildSummary(db, from, to) {
       .all()
       .then((r) => r.results[0]),
 
-    // Completion รายหัวข้อ — นับ "คน" ไม่ซ้ำ
+    // Completion รายหัวข้อ — นับ "คน" ไม่ซ้ำ เฉพาะผู้ต้องเดิน
     db
       .prepare(
         `SELECT t.id, t.theme_name, t.theme_name_en,
@@ -56,6 +71,7 @@ export async function buildSummary(db, from, to) {
            LEFT JOIN record_themes rt ON rt.theme_id = t.id
            LEFT JOIN gemba_walk_records r
                   ON r.id = rt.record_id AND r.actual_date BETWEEN ? AND ?
+                 AND r.manager_id IN (${WALKER_SQL})
           WHERE t.is_active = 1
           GROUP BY t.id
           ORDER BY t.id`,
@@ -132,7 +148,8 @@ export async function buildSummary(db, from, to) {
       total: issues,
       // สัดส่วนการเดินที่พบปัญหา — เทียบเท่า NG rate ของระบบเช็คลิสต์
       rate_pct: pct(issues, walks),
-      open: issues,
+      // ยังไม่ปิดที่จุดรวมปัญหา
+      open: recordsRow?.open_issues ?? 0,
     },
 
     // ภาพรวมหัวข้อ = ผลรวม actual ÷ ผลรวม plan (ตาม overallCompletion ใน calc.ts)
@@ -176,7 +193,7 @@ export async function buildCsv(db, from, to) {
               (SELECT group_concat(t.theme_name, ' | ' ORDER BY rt.sort_order)
                  FROM record_themes rt JOIN walk_themes t ON t.id = rt.theme_id
                 WHERE rt.record_id = r.id) AS themes,
-              r.observation, r.has_issue, r.issue_summary,
+              r.observation, r.has_issue, r.issue_summary, r.issue_status, r.issue_response,
               r.ci_required, r.ci_ticket_no,
               (SELECT COUNT(*) FROM record_participants p WHERE p.record_id = r.id) AS participants,
               (SELECT COUNT(*) FROM record_photos ph WHERE ph.record_id = r.id) AS photos,
@@ -193,8 +210,11 @@ export async function buildCsv(db, from, to) {
   const header = [
     'วันที่', 'เวลา', 'รหัสผู้จัดการ', 'ชื่อผู้จัดการ', 'แผนก', 'พื้นที่',
     'หัวข้อการเดิน', 'ประเภท', 'สิ่งที่สังเกต', 'พบปัญหา', 'สรุปปัญหา',
+    'สถานะที่จุดรวม', 'การดำเนินการ',
     'ต้องแก้ไข', 'เลขใบงาน CI', 'จำนวนผู้ร่วมเดิน', 'จำนวนรูป',
   ];
+
+  const ISSUE_STATUS_TH = { open: 'รอดำเนินการ', acknowledged: 'รับทราบแล้ว', closed: 'ปิดแล้ว' };
 
   const lines = [header.map(cell).join(',')];
   for (const r of results) {
@@ -203,6 +223,7 @@ export async function buildCsv(db, from, to) {
         r.actual_date, r.actual_time, r.manager_code, r.full_name, r.department, r.area_name,
         r.themes ?? '', r.walk_type, r.observation,
         r.has_issue ? 'ใช่' : 'ไม่', r.issue_summary,
+        r.has_issue ? ISSUE_STATUS_TH[r.issue_status] ?? r.issue_status : '', r.has_issue ? r.issue_response : '',
         r.ci_required ? 'ใช่' : 'ไม่', r.ci_ticket_no,
         r.participants, r.photos,
       ]

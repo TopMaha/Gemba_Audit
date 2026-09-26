@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Navigate } from 'react-router-dom';
-import { Database, Download, Layers, MapPin, Megaphone, Pencil, Plus, RefreshCw, Trash2, Upload, Users } from 'lucide-react';
+import { AlertTriangle, Database, Download, Footprints, Inbox, Layers, MapPin, Megaphone, Pencil, Plus, RefreshCw, Trash2, Upload, Users } from 'lucide-react';
 import { PageTitle } from '@/components/ManagerShell';
 import { ThemePicker } from '@/components/ThemePicker';
 import { Badge } from '@/components/ui/badge';
@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardBody, CardHeader } from '@/components/ui/card';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Field, Input, Select, Textarea } from '@/components/ui/field';
-import { Avatar, SkeletonList, SwitchRow, Switch, Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/misc';
+import { Avatar, EmptyState, SkeletonList, SwitchRow, Switch, Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/misc';
 import { useToast } from '@/components/ui/toast';
 import {
   useAdminGuard,
@@ -29,7 +29,7 @@ import { descendantIds } from '@/lib/areaTree';
 import { downloadText } from '@/lib/csv';
 import { areaLabelOf, managerLabel, themeLabel, useI18n } from '@/lib/i18n';
 import { savePhoto } from '@/lib/photos';
-import { endOfWeek, formatRange, startOfWeek, todayISO } from '@/lib/time';
+import { dowLabels, endOfWeek, formatRange, startOfWeek, todayISO } from '@/lib/time';
 import type { Area, Manager, WalkTheme, WeeklyFocus } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
@@ -48,6 +48,7 @@ export default function Settings() {
         <div className="scroll-x no-scrollbar -mx-3 mb-4 px-3">
           <TabsList>
             <TabsTrigger value="users">{t('admin.tabUsers')}</TabsTrigger>
+            <TabsTrigger value="walkers">{t('admin.tabWalkers')}</TabsTrigger>
             <TabsTrigger value="areas">{t('admin.tabAreas')}</TabsTrigger>
             <TabsTrigger value="themes">{t('admin.tabThemes')}</TabsTrigger>
             <TabsTrigger value="focus">{t('admin.tabFocus')}</TabsTrigger>
@@ -56,6 +57,7 @@ export default function Settings() {
         </div>
 
         <TabsContent value="users"><UsersTab /></TabsContent>
+        <TabsContent value="walkers"><WalkersTab /></TabsContent>
         <TabsContent value="areas"><AreasTab /></TabsContent>
         <TabsContent value="themes"><ThemesTab /></TabsContent>
         <TabsContent value="focus"><FocusTab /></TabsContent>
@@ -203,10 +205,15 @@ function UserDialog({
     );
   }, [manager, open]);
 
+  const toast = useToast();
   const upload = async (file?: File) => {
     if (!file) return;
-    const key = await savePhoto(file);
-    setForm((f) => ({ ...f, avatar_url: key }));
+    try {
+      const key = await savePhoto(file);
+      setForm((f) => ({ ...f, avatar_url: key }));
+    } catch {
+      toast(t('walk.photoUnreadable', { n: 1 }), 'error');
+    }
   };
 
   const submit = async () => {
@@ -277,6 +284,182 @@ function UserDialog({
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** ── ผู้ต้องเดิน Gemba + ตารางเดินรายบุคคล ─────────────────
+ * โรงงานให้เดินเฉพาะหัวหน้างาน ผู้ดูแลเลือกเป็นรายคนที่นี่ และกำหนดวันประจำของแต่ละคน
+ * ตัวเลขผลงานทุกตัว (Completion · อันดับ · ตารางการเดินรายบุคคล) นับเฉพาะคนในรายการนี้
+ */
+function WalkersTab() {
+  const { t, lang } = useI18n();
+  const toast = useToast();
+  const { managers, walkers, walkersConfigured, isLoading } = useCoreData();
+  const { data: settings } = useSettings();
+  const saveManager = useSaveManager();
+  const [view, setView] = useState<'walkers' | 'add'>('walkers');
+  const [term, setTerm] = useState('');
+  const labels = dowLabels(lang);
+  const fallbackTarget = settings?.weekly_target ?? 1;
+
+  const assigned = managers.filter((m) => m.is_active && m.is_walker);
+  const q = term.trim().toLowerCase();
+  const matches = (m: Manager) =>
+    `${m.manager_code} ${m.full_name} ${m.full_name_en ?? ''} ${m.department} ${m.position ?? ''}`.toLowerCase().includes(q);
+
+  const rows = useMemo(() => {
+    const pool =
+      view === 'walkers'
+        ? assigned
+        : // ทะเบียนมีเกือบสี่ร้อยคน — ถ้ายังไม่ได้ค้นหา แสดงเฉพาะคนที่เข้าระบบได้ (ระดับหัวหน้า) ก่อน
+          managers.filter((m) => m.is_active && !m.is_walker && (q ? true : m.can_login));
+    return pool
+      .filter(matches)
+      .sort((a, b) => a.department.localeCompare(b.department) || a.manager_code.localeCompare(b.manager_code));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [managers, view, q]);
+
+  const setWalker = async (m: Manager, on: boolean) => {
+    // คนที่ต้องเดินต้องเข้าระบบได้ ไม่งั้นจะถูกนับว่าไม่เดินทั้งที่ไม่มีทางบันทึก
+    const grant = on && !m.can_login;
+    await saveManager.mutateAsync({ id: m.id, is_walker: on, ...(grant ? { can_login: true } : {}) });
+    toast(on ? t('walkers.added', { name: managerLabel(m, lang) }) : t('walkers.removed', { name: managerLabel(m, lang) }), on ? 'success' : 'info');
+    if (grant) toast(t('walkers.loginGranted'), 'info');
+  };
+
+  const toggleDay = (m: Manager, day: number) => {
+    const next = m.walk_days.includes(day) ? m.walk_days.filter((d) => d !== day) : [...m.walk_days, day].sort((a, b) => a - b);
+    void saveManager.mutateAsync({ id: m.id, walk_days: next });
+  };
+
+  return (
+    <div className="space-y-3">
+      <Card accent>
+        <CardBody className="space-y-2 py-3.5">
+          <div className="flex items-center gap-2">
+            <Footprints className="h-4 w-4 text-accent" />
+            <span className="text-[14px] font-semibold">{t('walkers.title')}</span>
+            <Badge tone="accent" size="md" className="ml-auto">
+              {t('walkers.count', { n: assigned.length })}
+            </Badge>
+          </div>
+          <p className="text-[12px] leading-relaxed text-muted-foreground">{t('walkers.explain', { n: fallbackTarget })}</p>
+          {!walkersConfigured ? (
+            <p className="flex items-start gap-1.5 rounded-md border border-warn/40 bg-warn/10 px-2.5 py-2 text-[12px] leading-relaxed">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warn" />
+              {t('walkers.notConfigured', { n: walkers.length })}
+            </p>
+          ) : null}
+        </CardBody>
+      </Card>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex h-10 items-center rounded-md border bg-card p-0.5">
+          {([
+            ['walkers', t('walkers.viewAssigned', { n: assigned.length })],
+            ['add', t('walkers.viewAdd')],
+          ] as const).map(([value, label]) => (
+            <button
+              key={value}
+              onClick={() => setView(value)}
+              className={cn(
+                'press focusable h-9 rounded-[4px] px-3 text-[12px] font-medium',
+                view === value ? 'bg-primary text-primary-foreground' : 'text-muted-foreground',
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <Input
+          value={term}
+          onChange={(e) => setTerm(e.target.value)}
+          placeholder={t('walkers.searchPlaceholder')}
+          className="min-w-[180px] flex-1"
+        />
+      </div>
+
+      {isLoading ? (
+        <SkeletonList rows={4} />
+      ) : rows.length ? (
+        <div className="space-y-2">
+          {rows.map((m) => (
+            <Card key={m.id} className="p-3">
+              <div className="flex items-center gap-3">
+                <Avatar name={managerLabel(m, lang)} src={m.avatar_url} seed={m.id} size={40} />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="truncate text-[14px] font-medium">{managerLabel(m, lang)}</span>
+                    {!m.can_login ? <Badge>{t('admin.noLoginBadge')}</Badge> : null}
+                  </div>
+                  <div className="num truncate text-[11px] text-muted-foreground">
+                    {m.manager_code} · {m.department}
+                    {m.position ? ` · ${m.position}` : ''}
+                  </div>
+                </div>
+                {view === 'walkers' ? (
+                  <label className="flex shrink-0 items-center gap-2">
+                    <span className="hidden text-[12px] text-muted-foreground sm:inline">{t('walkers.mustWalk')}</span>
+                    <Switch checked={m.is_walker} onCheckedChange={(v) => setWalker(m, v)} aria-label={t('walkers.mustWalk')} />
+                  </label>
+                ) : (
+                  <Button variant="outline" size="sm" className="h-10 shrink-0" onClick={() => setWalker(m, true)}>
+                    <Plus className="h-4 w-4" />
+                    {t('walkers.add')}
+                  </Button>
+                )}
+              </div>
+
+              {view === 'walkers' ? (
+                <div className="mt-2.5 border-t pt-2.5">
+                  <div className="mb-1.5 flex items-center justify-between gap-2">
+                    <span className="label-micro">{t('walkers.days')}</span>
+                    <span className="num text-[11px] text-muted-foreground">
+                      {t('walkers.perWeek', { n: m.walk_days.length || fallbackTarget })}
+                      {m.walk_days.length ? '' : ` (${t('walkers.defaultTarget')})`}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-7 gap-1" role="group" aria-label={t('walkers.days')}>
+                    {labels.map((label, day) => {
+                      const on = m.walk_days.includes(day);
+                      return (
+                        <button
+                          key={day}
+                          type="button"
+                          aria-pressed={on}
+                          onClick={() => toggleDay(m, day)}
+                          className={cn(
+                            'press focusable h-10 rounded-md border text-[12px] font-medium',
+                            on ? 'border-accent bg-accent text-accent-foreground' : 'bg-card text-muted-foreground hover:border-accent/50',
+                          )}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
+            </Card>
+          ))}
+        </div>
+      ) : (
+        <EmptyState
+          icon={<Footprints className="h-8 w-8" />}
+          title={view === 'walkers' ? t('walkers.emptyAssigned') : t('common.noData')}
+          hint={view === 'walkers' ? t('walkers.emptyAssignedHint') : t('walkers.searchHint')}
+          action={
+            view === 'walkers' ? (
+              <Button variant="accent" onClick={() => setView('add')}>
+                <Plus className="h-4 w-4" />
+                {t('walkers.viewAdd')}
+              </Button>
+            ) : undefined
+          }
+        />
+      )}
+      {view === 'add' && !q ? <p className="text-center text-[11px] text-muted-foreground">{t('walkers.searchHint')}</p> : null}
+    </div>
   );
 }
 
@@ -649,6 +832,11 @@ function SystemTab() {
   const { t, lang } = useI18n();
   const toast = useToast();
   const { data: settings } = useSettings();
+  const { managers } = useCoreData();
+  // ผู้รับเรื่องต้องเข้าระบบได้ ไม่งั้นจะไม่มีใครเห็นปัญหาที่เด้งเข้ามา
+  const ownerChoices = managers
+    .filter((m) => m.is_active && m.can_login)
+    .sort((a, b) => a.manager_code.localeCompare(b.manager_code));
   const saveSettings = useSaveSettings();
   const { data: logins = [] } = useLoginHistory();
   const [form, setForm] = useState(settings);
@@ -706,6 +894,30 @@ function SystemTab() {
               />
             </Field>
           </div>
+          <Button variant="accent" onClick={save}>{t('common.save')}</Button>
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader
+          title={t('issues.ownerSetting')}
+          hint={t('issues.ownerHint')}
+          right={<Inbox className="h-4 w-4 text-accent" />}
+        />
+        <CardBody className="space-y-3">
+          <Field label={t('issues.owner')}>
+            <Select
+              value={form?.issue_owner_id ?? ''}
+              onChange={(e) => setForm((f) => f && { ...f, issue_owner_id: e.target.value || null })}
+            >
+              <option value="">{t('issues.ownerNone')}</option>
+              {ownerChoices.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.manager_code} · {managerLabel(m, lang)} · {m.department}
+                </option>
+              ))}
+            </Select>
+          </Field>
           <Button variant="accent" onClick={save}>{t('common.save')}</Button>
         </CardBody>
       </Card>

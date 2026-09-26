@@ -46,7 +46,14 @@ startSync();
 
 // Service worker — ทำให้เปิดแอปได้แม้ไม่มีสัญญาณ และติดตั้งลงหน้าจอโฮมได้
 // ต้องเสิร์ฟผ่าน http/https เท่านั้น เปิดแบบ file:// จะลงทะเบียนไม่ได้
-if ('serviceWorker' in navigator && window.location.protocol !== 'file:') {
+//
+// ใช้เฉพาะไฟล์ที่ build แล้ว — ตอน npm run dev ตัว service worker จะแคชไฟล์ต้นฉบับ
+// (/src/*.ts) แบบ cache-first ทำให้เห็นโค้ดเก่าค้างหรือจอขาวหลังแก้โค้ด
+// จึงถอนตัวที่เคยลงทะเบียนไว้ในเครื่องนักพัฒนาออกด้วย
+if (import.meta.env.DEV && 'serviceWorker' in navigator) {
+  void navigator.serviceWorker.getRegistrations().then((regs) => regs.forEach((r) => void r.unregister()));
+}
+if (import.meta.env.PROD && 'serviceWorker' in navigator && window.location.protocol !== 'file:') {
   window.addEventListener('load', () => {
     navigator.serviceWorker
       .register(`${import.meta.env.BASE_URL}sw.js`, { scope: import.meta.env.BASE_URL })

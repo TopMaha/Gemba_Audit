@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { AlertTriangle, Camera, History as HistoryIcon, Search, Ticket, Zap } from 'lucide-react';
+import { IssueStatusBadge } from '@/components/IssueStatus';
 import { PageTitle } from '@/components/ManagerShell';
 import { ThemeBadges } from '@/components/ThemeBadges';
 import { WalkDetailDialog } from '@/components/WalkDetailDialog';
@@ -117,7 +118,7 @@ export default function History() {
                                 {t('status.adhoc')}
                               </Badge>
                             ) : null}
-                            {r.has_issue ? <Badge tone="bad">{t('status.issue')}</Badge> : null}
+                            {r.has_issue ? <IssueStatusBadge status={r.issue_status} /> : null}
                           </div>
                           <p className="mt-1 truncate text-[12px] text-muted-foreground">{pathOf(r.actual_area_id)}</p>
                           <p className="mt-1.5 line-clamp-2 text-[13px] leading-snug">{r.observation}</p>

@@ -107,7 +107,17 @@ async function uploadPendingPhotos(keys: string[]): Promise<string[]> {
     }
     const blob = await getPhotoBlob(key);
     if (!blob) continue; // รูปหายไปจากเครื่องแล้ว ข้ามไปไม่ให้ทั้งคิวค้าง
-    out.push(await apiUpload(blob));
+    try {
+      out.push(await apiUpload(blob));
+    } catch (e) {
+      const err = e as ApiError;
+      // เน็ต/สิทธิ์/เซิร์ฟเวอร์มีปัญหา = ส่งต่อให้ pushAll หยุดรอบนี้แล้วลองใหม่ทีหลัง
+      if (err.isOffline || err.status >= 500 || err.status === 401 || err.status === 403) throw err;
+      // เซิร์ฟเวอร์ไม่รับรูปนี้ (ชนิดไฟล์/ขนาด) — ข้ามเฉพาะรูปนี้
+      // ของเดิมปล่อยให้ล้มทั้งงาน แล้ว pushAll ทิ้งบันทึกการเดินทั้งใบเพราะเป็น 4xx
+      // ผู้ใช้เสียบันทึกไปทั้งใบเพียงเพราะรูปเดียวมีปัญหา
+      console.warn('ข้ามรูปที่เซิร์ฟเวอร์ไม่รับ', key, err.message);
+    }
   }
   return out;
 }

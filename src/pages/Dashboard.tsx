@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ChevronLeft, ChevronRight, Lock, Medal, TrendingUp } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Info, Lock, Medal, TrendingUp } from 'lucide-react';
 import { PageTitle } from '@/components/ManagerShell';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -7,8 +7,8 @@ import { Card, CardBody, CardHeader, StatBlock } from '@/components/ui/card';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Avatar, BandBar, EmptyState, InfoHint, SectionTitle, Skeleton, Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/misc';
 import { useCoreData, useSession } from '@/hooks/useData';
-import { adherence, bandOf, overallCompletion, rankManagers, themeCompletion } from '@/lib/calc';
-import { managerLabel, themeLabel, useI18n } from '@/lib/i18n';
+import { adherence, bandOf, dayStatus, overallCompletion, rankManagers, themeCompletion } from '@/lib/calc';
+import { managerLabel, themeLabel, useI18n, type TKey } from '@/lib/i18n';
 import {
   addMonths,
   addDays,
@@ -22,6 +22,7 @@ import {
   startOfMonth,
   startOfWeek,
   todayISO,
+  weekdayIndex,
 } from '@/lib/time';
 import { cn } from '@/lib/utils';
 
@@ -30,7 +31,8 @@ type Scope = 'week' | 'month';
 export default function Dashboard() {
   const { t, lang } = useI18n();
   const { session, admin } = useSession();
-  const { activeManagers, plans, records, themes, isLoading } = useCoreData();
+  // นับเฉพาะคนที่ต้องเดิน Gemba (หัวหน้างาน) ไม่ใช่พนักงานทั้งโรงงาน
+  const { walkers, walkersConfigured, plans, records, themes, isLoading } = useCoreData();
 
   const [scope, setScope] = useState<Scope>('week');
   const [offset, setOffset] = useState(0);
@@ -72,13 +74,13 @@ export default function Dashboard() {
     [plans, from, to, session],
   );
   const teamAdherence = useMemo(() => adherence(plans, from, to), [plans, from, to]);
-  const ranks = useMemo(() => rankManagers(activeManagers, plans, records, from, to), [activeManagers, plans, records, from, to]);
+  const ranks = useMemo(() => rankManagers(walkers, plans, records, from, to), [walkers, plans, records, from, to]);
   const myRank = ranks.find((r) => r.manager.id === session?.manager_id);
   const teamWalks = records.filter((r) => r.actual_date >= from && r.actual_date <= to);
 
   const completionRows = useMemo(
-    () => themeCompletion(chosenThemes, records, activeManagers, themeRange.from, themeRange.to),
-    [chosenThemes, records, activeManagers, themeRange],
+    () => themeCompletion(chosenThemes, records, walkers, themeRange.from, themeRange.to),
+    [chosenThemes, records, walkers, themeRange],
   );
   const overall = overallCompletion(completionRows);
 
@@ -98,6 +100,13 @@ export default function Dashboard() {
   return (
     <div>
       <PageTitle title={t('dash.title')} />
+
+      {!walkersConfigured ? (
+        <p className="mb-4 flex items-start gap-2 rounded-md border bg-muted/50 px-3 py-2 text-[12px] leading-relaxed text-muted-foreground">
+          <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent" />
+          {t('walkers.notConfigured', { n: walkers.length })}
+        </p>
+      ) : null}
 
       {/* ตัวเลือกช่วงเวลา */}
       <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -234,16 +243,19 @@ export default function Dashboard() {
                           const n = records.filter(
                             (r) => r.manager_id === row.manager.id && r.actual_date === d,
                           ).length;
+                          const status = dayStatus(row.manager.walk_days.includes(weekdayIndex(d)), n, d, today);
                           return (
                             <td key={d} className="px-0.5 py-1.5">
                               <span
-                                title={`${formatDate(d, lang)} · ${n}`}
+                                title={`${formatDate(d, lang)} · ${n} · ${t(`walkers.status_${status}` as TKey)}`}
                                 className={cn(
                                   'mx-auto block h-5 w-5 rounded-[3px] border',
                                   n === 0 && 'border-border bg-muted/50',
                                   n === 1 && 'border-accent/40 bg-accent/35',
                                   n === 2 && 'border-accent/60 bg-accent/65',
                                   n >= 3 && 'border-accent bg-accent',
+                                  status === 'due' && 'border-2 border-dashed border-accent/70 bg-transparent',
+                                  status === 'missed' && 'border-2 border-bad bg-bad/15',
                                 )}
                               />
                             </td>
@@ -254,6 +266,11 @@ export default function Dashboard() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t px-4 py-2.5 text-[11px] text-muted-foreground">
+                <Legend className="border-accent/40 bg-accent/35">{t('walkers.legendWalked')}</Legend>
+                <Legend className="border-2 border-dashed border-accent/70">{t('walkers.legendDue')}</Legend>
+                <Legend className="border-2 border-bad bg-bad/15">{t('walkers.legendMissed')}</Legend>
               </div>
             </Card>
 
@@ -398,7 +415,7 @@ export default function Dashboard() {
             <Card>
               <CardHeader
                 title={t('dash.themeSummary')}
-                hint={`${t('dash.scope')}: ${themeRange.label} · Plan = ${activeManagers.length} ${t('common.people')}`}
+                hint={`${t('dash.scope')}: ${themeRange.label} · Plan = ${walkers.length} ${t('common.people')}`}
               />
               <CardBody className="space-y-3">
                 {completionRows.map((row) => {
@@ -440,7 +457,7 @@ export default function Dashboard() {
             {missingRow.missingManagerIds.length ? (
               <ul className="space-y-1.5">
                 {missingRow.missingManagerIds.map((id) => {
-                  const m = activeManagers.find((x) => x.id === id);
+                  const m = walkers.find((x) => x.id === id);
                   return (
                     <li key={id} className="flex items-center gap-2.5 rounded-md border px-3 py-2">
                       <Avatar name={managerLabel(m, lang)} src={m?.avatar_url} seed={id} size={30} />
@@ -461,5 +478,14 @@ export default function Dashboard() {
         ) : null}
       </Dialog>
     </div>
+  );
+}
+
+function Legend({ className, children }: { className: string; children: React.ReactNode }) {
+  return (
+    <span className="flex items-center gap-1.5">
+      <span className={cn('block h-3.5 w-3.5 rounded-[3px] border', className)} />
+      {children}
+    </span>
   );
 }

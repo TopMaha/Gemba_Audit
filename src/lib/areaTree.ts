@@ -1,47 +1,27 @@
 import type { Area } from './types';
 import type { Lang } from './time';
-
-export interface AreaNode extends Area {
-  children: AreaNode[];
-  depth: number;
-  path: string[]; // ชื่อพื้นที่ตั้งแต่ระดับบนสุดถึงตัวเอง
-}
+import { AREA_ORDER } from './roster';
 
 export function areaLabel(a: Pick<Area, 'area_name' | 'area_name_en'>, lang: Lang): string {
   return lang === 'en' ? a.area_name_en || a.area_name : a.area_name;
 }
 
-/** จัดพื้นที่เป็นโครงสร้างต้นไม้ Parent–Child */
-export function buildTree(areas: Area[], lang: Lang = 'th'): AreaNode[] {
-  const byId = new Map<string, AreaNode>();
-  areas.forEach((a) => byId.set(a.id, { ...a, children: [], depth: 0, path: [] }));
-
-  const roots: AreaNode[] = [];
-  byId.forEach((node) => {
-    const parent = node.parent_id ? byId.get(node.parent_id) : null;
-    if (parent) parent.children.push(node);
-    else roots.push(node);
-  });
-
-  const walk = (node: AreaNode, depth: number, path: string[]) => {
-    node.depth = depth;
-    node.path = [...path, areaLabel(node, lang)];
-    node.children.sort((a, b) => areaLabel(a, lang).localeCompare(areaLabel(b, lang), 'th'));
-    node.children.forEach((c) => walk(c, depth + 1, node.path));
+/**
+ * เรียงพื้นที่ตามลำดับของโรงงาน (VSM1–4 · QC · OFFICE)
+ * ถ้าเรียงตามตัวอักษร OFFICE จะขึ้นก่อน VSM1 ซึ่งไม่ตรงกับที่หน้างานคุ้นเคย
+ * พื้นที่ที่ผู้ดูแลเพิ่มเองภายหลังจะต่อท้ายตามชื่อ
+ */
+export function sortAreas(areas: Area[], lang: Lang = 'th'): Area[] {
+  const rank = (a: Area) => {
+    const i = AREA_ORDER.indexOf(a.id);
+    return i < 0 ? AREA_ORDER.length : i;
   };
-  roots.sort((a, b) => areaLabel(a, lang).localeCompare(areaLabel(b, lang), 'th'));
-  roots.forEach((r) => walk(r, 0, []));
-  return roots;
+  return [...areas].sort(
+    (a, b) => rank(a) - rank(b) || areaLabel(a, lang).localeCompare(areaLabel(b, lang), 'th', { numeric: true }),
+  );
 }
 
-export function flatten(nodes: AreaNode[]): AreaNode[] {
-  const out: AreaNode[] = [];
-  const walk = (list: AreaNode[]) => list.forEach((n) => (out.push(n), walk(n.children)));
-  walk(nodes);
-  return out;
-}
-
-/** เส้นทางเต็ม เช่น 'สายการผลิต › ไลน์ผลิต 1 › สถานีประกอบ A' */
+/** เส้นทางเต็ม เช่น 'VSM1 › ไลน์ประกอบ A' (พื้นที่ระดับบนสุดจะได้ชื่อตัวเอง) */
 export function fullPath(areas: Area[], areaId: string, lang: Lang = 'th'): string {
   const byId = new Map(areas.map((a) => [a.id, a]));
   const parts: string[] = [];
@@ -52,30 +32,6 @@ export function fullPath(areas: Area[], areaId: string, lang: Lang = 'th'): stri
     cur = cur.parent_id ? byId.get(cur.parent_id) : undefined;
   }
   return parts.join(' › ');
-}
-
-export function areaName(areas: Area[], areaId: string, lang: Lang = 'th'): string {
-  const a = areas.find((x) => x.id === areaId);
-  return a ? areaLabel(a, lang) : '—';
-}
-
-/** ค้นหาได้ทุกระดับ คืนผลพร้อมเส้นทางเต็ม */
-export function searchAreas(areas: Area[], term: string, lang: Lang = 'th'): { area: Area; path: string }[] {
-  const q = term.trim().toLowerCase();
-  if (!q) return [];
-  return areas
-    .filter((a) => a.is_active)
-    .filter((a) => `${a.area_name} ${a.area_name_en ?? ''}`.toLowerCase().includes(q))
-    .slice(0, 40)
-    .map((area) => ({ area, path: fullPath(areas, area.id, lang) }));
-}
-
-export function childrenOf(areas: Area[], parentId: string | null): Area[] {
-  return areas.filter((a) => a.parent_id === parentId && a.is_active);
-}
-
-export function hasChildren(areas: Area[], id: string): boolean {
-  return areas.some((a) => a.parent_id === id && a.is_active);
 }
 
 /** id ของตัวเองและลูกหลานทั้งหมด */

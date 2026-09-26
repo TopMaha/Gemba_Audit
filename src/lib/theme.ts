@@ -1,34 +1,26 @@
-/** ธีมสี + โหมดสว่าง/มืด — เก็บค่าที่เลือกไว้ในเครื่อง */
+/**
+ * ธีมสี — ใช้ธีมองค์กร TENNECO (น้ำเงิน–ขาว) ตายตัว ไม่ให้เลือกสีเน้นเองแล้ว
+ * ผู้ใช้สลับได้แค่โหมดสว่าง/มืด (มืด = โทนกรมท่า สำหรับกะกลางคืน)
+ */
 
-export type Accent = 'amber' | 'steel' | 'lime';
 export type Mode = 'light' | 'dark';
 
-const ACCENT_KEY = 'gemba.accent';
-const MODE_KEY = 'gemba.mode';
-
-export const ACCENTS: { id: Accent; label: string; swatch: string }[] = [
-  { id: 'amber', label: 'Safety Amber', swatch: 'hsl(34 92% 47%)' },
-  { id: 'steel', label: 'Steel Blue', swatch: 'hsl(205 62% 40%)' },
-  { id: 'lime', label: 'Hi-Vis Lime', swatch: 'hsl(88 58% 38%)' },
-];
-
-export function getAccent(): Accent {
-  const v = localStorage.getItem(ACCENT_KEY);
-  return v === 'steel' || v === 'lime' ? v : 'amber';
-}
+/**
+ * คีย์ใหม่โดยตั้งใจ — ค่าเดิม (gemba.mode) เคยตามโหมดของเครื่องอัตโนมัติ
+ * เครื่องที่ตั้งมืดไว้จึงค้างธีมมืดชุดเก่า ขึ้นคีย์ใหม่ให้ทุกคนเริ่มที่น้ำเงิน–ขาวก่อน
+ */
+const MODE_KEY = 'gemba.mode.v2';
+const LEGACY_KEYS = ['gemba.mode', 'gemba.accent'];
 
 export function getMode(): Mode {
-  const v = localStorage.getItem(MODE_KEY);
-  if (v === 'dark' || v === 'light') return v;
-  return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  return localStorage.getItem(MODE_KEY) === 'dark' ? 'dark' : 'light';
 }
 
-export function applyTheme(accent: Accent = getAccent(), mode: Mode = getMode()) {
+export function applyTheme(mode: Mode = getMode()) {
   const root = document.documentElement;
   root.classList.remove('theme-steel', 'theme-lime');
-  if (accent !== 'amber') root.classList.add(`theme-${accent}`);
   root.classList.toggle('dark', mode === 'dark');
-  localStorage.setItem(ACCENT_KEY, accent);
+  for (const k of LEGACY_KEYS) localStorage.removeItem(k);
   localStorage.setItem(MODE_KEY, mode);
 }
 

@@ -4,7 +4,7 @@ import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Field, Input, Textarea } from '@/components/ui/field';
 import { useToast } from '@/components/ui/toast';
-import { HierarchicalAreaPicker } from '@/components/HierarchicalAreaPicker';
+import { AreaPicker } from '@/components/AreaPicker';
 import { ThemePicker } from '@/components/ThemePicker';
 import { useCoreData, useCreatePlan, useSession, useSettings, useUpdatePlan, useWeeklyFocus } from '@/hooks/useData';
 import { useI18n } from '@/lib/i18n';
@@ -128,7 +128,7 @@ export function PlanEditor({
           </div>
 
           <Field label={t('common.area')} required>
-            <HierarchicalAreaPicker areas={areas} value={areaId} onChange={setAreaId} />
+            <AreaPicker areas={areas} value={areaId} onChange={setAreaId} />
           </Field>
 
           {warn ? (

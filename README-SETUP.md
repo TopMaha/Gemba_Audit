@@ -14,6 +14,36 @@
 
 ---
 
+## 🆕 อัปเดตรอบนี้ — ผู้ต้องเดิน · จุดรวมปัญหา · พื้นที่ 6 แห่ง · ธีม TENNECO
+
+ฐานข้อมูลต้องเพิ่มคอลัมน์ก่อน แล้วค่อย deploy Worker และหน้าเว็บ **ตามลำดับนี้**
+(ถ้า deploy Worker ก่อน Worker จะอ้างคอลัมน์ที่ยังไม่มีแล้วตอบ error)
+
+**1. อัปเดตฐานข้อมูล D1** — เพิ่มคอลัมน์ผู้ต้องเดิน/สถานะปัญหา ตั้ง T-815 เป็นผู้รับเรื่อง
+และเหลือพื้นที่ที่เปิดใช้งาน 6 แห่ง (พื้นที่เดิมถูกปิด ไม่ถูกลบ ประวัติเดิมยังอยู่ครบ)
+
+```bash
+cd worker && npx wrangler d1 execute gemba-audit --remote --file=./migrate-walkers-issues.sql
+```
+
+**2. deploy Worker**
+
+```bash
+cd worker && npx wrangler deploy
+```
+
+**3. deploy หน้าเว็บ**
+
+```bash
+npm run deploy
+```
+
+หลังขึ้นระบบ ผู้ดูแลเข้า `/admin` → ตั้งค่า → แท็บ **ผู้เดิน Gemba** เพื่อเลือกหัวหน้างานที่ต้องเดิน
+และวันประจำของแต่ละคน (ระหว่างที่ยังไม่ได้เลือกใคร แดชบอร์ดจะนับทุกคนที่มีสิทธิ์เข้าใช้งานแทน)
+ผู้รับเรื่องที่จุดรวมปัญหาเปลี่ยนได้ที่แท็บ **ระบบ**
+
+---
+
 ## สารบัญ
 
 - [ส่วนที่ 1 — คำสั่งที่ต้องรู้](#ส่วนที่-1--คำสั่งที่ต้องรู้)
@@ -192,21 +222,21 @@ curl -s https://topmaha.github.io/Gemba_Audit/ | grep "src/main.tsx"
 
 | ตาราง | หน้าที่ |
 |---|---|
-| `managers` | ทะเบียนพนักงาน 393 คน — ล็อกอินด้วย `manager_code` ได้เฉพาะคนที่ `can_login = 1` (63 คน) ที่เหลืออยู่ในทะเบียนเพื่อเลือกเป็นผู้ร่วมเดิน |
+| `managers` | ทะเบียนพนักงาน 393 คน — ล็อกอินด้วย `manager_code` ได้เฉพาะคนที่ `can_login = 1` (63 คน) ที่เหลืออยู่ในทะเบียนเพื่อเลือกเป็นผู้ร่วมเดิน · `is_walker` = ต้องเดิน Gemba · `walk_days` = วันประจำ (bitmask อา.=1 … ส.=64) |
 | `superusers` | ผู้ดูแลระบบ (เข้าที่ `/admin`) |
 | `admin_sessions` | เซสชันผู้ดูแลที่ยังใช้ได้ — เก็บแฟ้มแฮชของโทเคน เป็นด่านจริงของงานแอดมิน |
-| `areas` | พื้นที่ 20 แห่ง โครงสร้างต้นไม้ผ่าน `parent_id` |
+| `areas` | พื้นที่เดิน 6 แห่ง (VSM1–4 · QC · OFFICE) โครงสร้างต้นไม้ผ่าน `parent_id` |
 | `walk_themes` | หัวข้อการเดิน 8 หัวข้อ |
 | `gemba_plans` | แผนการเดิน |
 | `plan_themes` | หัวข้อของแต่ละแผน (สูงสุด 3) |
-| `gemba_walk_records` | บันทึกการเดินจริง — `plan_id` เป็น NULL ได้ = Ad-hoc |
+| `gemba_walk_records` | บันทึกการเดินจริง — `plan_id` เป็น NULL ได้ = Ad-hoc · `issue_status` / `issue_response` = สถานะที่จุดรวมปัญหา |
 | `record_themes` | หัวข้อของแต่ละบันทึก |
 | `record_photos` | รูปหน้างาน เก็บ `photo_key` ที่ชี้ไปยัง R2 |
 | `record_participants` | ชื่อผู้ร่วมเดิน |
 | `change_history` | ร่องรอยการแก้ไขรายฟิลด์ |
 | `weekly_focus` + `focus_themes` | ประกาศหัวข้อประจำสัปดาห์ |
 | `login_history` | ประวัติการเข้าสู่ระบบ |
-| `app_settings` | ตั้งค่าระบบ (แถวเดียว บังคับด้วย `CHECK (id = 1)`) |
+| `app_settings` | ตั้งค่าระบบ (แถวเดียว บังคับด้วย `CHECK (id = 1)`) · `issue_owner_id` = ผู้รับเรื่องที่จุดรวมปัญหา |
 
 ### 4.3 กติกาสำคัญที่คนเขียน Worker ต้องรู้
 
@@ -398,7 +428,7 @@ GET    /api/records      ?from &to &manager_id &area_id &has_issue &limit &offse
 GET    /api/records/:id  (แนบประวัติการแก้ไขมาด้วย)
 POST   /api/records · PUT /api/records/:id
 
-GET    /api/issues/open                     ประเด็นค้างที่ยังไม่เปิดใบงาน เรียงจากเก่าสุด
+GET    /api/issues/open                     ปัญหาที่จุดรวมยังไม่ปิด เรียงจากเก่าสุด
 GET    /api/change-history ?record_id
 GET    /api/focus ?date · GET /api/focus/list · POST /api/focus · PUT /api/focus/:id
 

@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Field, Input, Textarea } from '@/components/ui/field';
 import { Avatar, SwitchRow } from '@/components/ui/misc';
 import { useToast } from '@/components/ui/toast';
+import { IssueStatusBadge } from '@/components/IssueStatus';
 import { PhotoGrid, PhotoUploader } from '@/components/PhotoUploader';
 import { ThemeBadges } from '@/components/ThemeBadges';
 import { ThemePicker } from '@/components/ThemePicker';
@@ -28,6 +29,8 @@ const FIELD_LABELS: Record<string, { th: string; en: string }> = {
   plan_date: { th: 'วันที่ตามแผน', en: 'Plan date' },
   plan_time: { th: 'เวลาตามแผน', en: 'Plan time' },
   area_id: { th: 'พื้นที่', en: 'Area' },
+  issue_status: { th: 'สถานะปัญหา (จุดรวม)', en: 'Issue status' },
+  issue_response: { th: 'การดำเนินการของผู้รับเรื่อง', en: 'Owner response' },
 };
 
 export function WalkDetailDialog({
@@ -122,7 +125,11 @@ export function WalkDetailDialog({
             ) : (
               <Badge tone="steel">{t('status.adhoc')}</Badge>
             )}
-            {value.has_issue ? <Badge tone="bad">{t('status.issue')}</Badge> : <Badge tone="neutral">{t('status.normal')}</Badge>}
+            {value.has_issue ? (
+              <IssueStatusBadge status={record.issue_status} />
+            ) : (
+              <Badge tone="neutral">{t('status.normal')}</Badge>
+            )}
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2">
@@ -194,7 +201,15 @@ export function WalkDetailDialog({
                   onChange={(e) => setDraft((d) => ({ ...d, issue_summary: e.target.value }))}
                 />
               ) : (
-                <p className="mt-1 whitespace-pre-wrap text-[13px] leading-relaxed">{value.issue_summary || '—'}</p>
+                <>
+                  <p className="mt-1 whitespace-pre-wrap text-[13px] leading-relaxed">{value.issue_summary || '—'}</p>
+                  {record.has_issue && record.issue_response ? (
+                    <div className="mt-2 rounded-md border bg-muted/40 px-3 py-2 text-[13px] leading-relaxed">
+                      <span className="label-micro mr-1.5">{t('issues.response')}</span>
+                      {record.issue_response}
+                    </div>
+                  ) : null}
+                </>
               )
             ) : !editing ? (
               <p className="mt-1 text-[13px] text-muted-foreground">{t('status.normal')}</p>

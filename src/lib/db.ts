@@ -1,4 +1,4 @@
-import { buildSeedDb } from './seed';
+import { ISSUE_OWNER_DEFAULT, buildSeedDb } from './seed';
 import type { Db } from './types';
 
 /**
@@ -32,13 +32,33 @@ function fresh(): Db {
   return db;
 }
 
+/**
+ * เติมค่าตั้งต้นให้ฟิลด์ที่เพิ่มเข้ามาทีหลัง (ผู้ต้องเดิน · วันเดิน · สถานะปัญหา · ผู้รับเรื่อง)
+ *
+ * สำเนาในเครื่องชุดเก่า และเซิร์ฟเวอร์ที่ยังไม่ได้รัน worker/migrate-walkers-issues.sql
+ * จะส่งข้อมูลที่ไม่มีฟิลด์เหล่านี้มา ถ้าปล่อยเป็น undefined หน้าจอใหม่จะพัง
+ * จึงเติมที่จุดเดียวตรงนี้ แทนการเขียน ?? กระจายทุกหน้าจอ
+ */
+function withDefaults(db: Db): Db {
+  db.managers = db.managers.map((m) => ({ ...m, is_walker: m.is_walker ?? false, walk_days: m.walk_days ?? [] }));
+  db.gemba_walk_records = db.gemba_walk_records.map((r) => ({
+    ...r,
+    issue_status: r.issue_status ?? 'open',
+    issue_response: r.issue_response ?? '',
+  }));
+  if (db.app_settings.issue_owner_id === undefined) {
+    db.app_settings = { ...db.app_settings, issue_owner_id: ISSUE_OWNER_DEFAULT };
+  }
+  return db;
+}
+
 function read(): Db {
   if (cache) return cache;
   try {
     const raw = localStorage.getItem(KEY);
-    cache = raw ? (JSON.parse(raw) as Db) : fresh();
+    cache = withDefaults(raw ? (JSON.parse(raw) as Db) : fresh());
   } catch {
-    cache = fresh();
+    cache = withDefaults(fresh());
   }
   return cache;
 }
@@ -104,13 +124,13 @@ export async function exportDb(): Promise<string> {
  */
 export function hydrate(patch: Partial<Db>) {
   const db = read();
-  cache = { ...db, ...patch };
+  cache = withDefaults({ ...db, ...patch });
   persist();
 }
 
 export async function importDb(json: string) {
   const parsed = JSON.parse(json) as Db;
   if (!parsed.managers || !parsed.areas) throw new Error('ไฟล์ข้อมูลไม่ถูกต้อง');
-  cache = parsed;
+  cache = withDefaults(parsed);
   persist();
 }

@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from 'react';
 import * as api from '@/lib/api';
-import { buildTree, fullPath as fullPathOf } from '@/lib/areaTree';
+import { fullPath as fullPathOf, sortAreas } from '@/lib/areaTree';
+import { openIssues, pickWalkers } from '@/lib/calc';
 import { useI18n } from '@/lib/i18n';
 import { getSession, isAdmin, subscribeSession, syncSession } from '@/lib/session';
 import type { GembaPlan, WalkRecord } from '@/lib/types';
@@ -35,23 +36,56 @@ export function useCoreData() {
   const records = useRecords();
   const { lang } = useI18n();
 
-  const tree = useMemo(() => buildTree(areas.data ?? [], lang), [areas.data, lang]);
+  const sortedAreas = useMemo(() => sortAreas(areas.data ?? [], lang), [areas.data, lang]);
   const pathOf = useCallback(
     (areaId: string) => fullPathOf(areas.data ?? [], areaId, lang),
     [areas.data, lang],
   );
   const activeManagers = useMemo(() => (managers.data ?? []).filter((m) => m.is_active), [managers.data]);
+  const { walkers, configured: walkersConfigured } = useMemo(() => pickWalkers(managers.data ?? []), [managers.data]);
 
   return {
     managers: managers.data ?? [],
     activeManagers,
-    areas: areas.data ?? [],
+    /** คนที่ต้องเดิน Gemba — ฐานของตัวเลขผลงานทุกตัว (ดู pickWalkers) */
+    walkers,
+    /** ผู้ดูแลกำหนดผู้ต้องเดินแล้วหรือยัง (ยัง = ใช้ทุกคนที่เข้าระบบได้แทน) */
+    walkersConfigured,
+    /** พื้นที่ทั้งหมด เรียงตามลำดับของโรงงาน (VSM1–4 · QC · OFFICE) */
+    areas: sortedAreas,
     themes: themes.data ?? [],
     plans: plans.data ?? [],
     records: records.data ?? [],
-    tree,
     pathOf,
     isLoading: managers.isLoading || areas.isLoading || themes.isLoading || plans.isLoading || records.isLoading,
+  };
+}
+
+/**
+ * จุดรวมปัญหา — บันทึกที่พบปัญหาจะเด้งไปหาผู้รับเรื่องที่ตั้งไว้ในหน้าตั้งค่า
+ * ผู้รับเรื่องและผู้ดูแลระบบเปลี่ยนสถานะได้ คนอื่นดูได้อย่างเดียว
+ */
+export function useIssueInbox() {
+  const { session, admin } = useSession();
+  const { data: settings } = useSettings();
+  const { data: managers } = useManagers();
+  const { data: records } = useRecords();
+
+  const ownerId = settings?.issue_owner_id ?? null;
+  const owner = useMemo(() => managers?.find((m) => m.id === ownerId), [managers, ownerId]);
+  const open = useMemo(() => openIssues(records ?? []), [records]);
+  const waiting = useMemo(() => open.filter((r) => r.issue_status === 'open'), [open]);
+  const isOwner = Boolean(session && ownerId && session.manager_id === ownerId);
+
+  return {
+    owner,
+    isOwner,
+    /** แก้สถานะได้ไหม — ผู้รับเรื่อง หรือผู้ดูแลระบบ */
+    canHandle: isOwner || admin,
+    /** ปัญหาที่ยังไม่ปิด (รอดำเนินการ + รับทราบแล้ว) */
+    open,
+    /** เฉพาะที่ยังไม่มีใครรับทราบ — ใช้เป็นตัวเลขแจ้งเตือน */
+    waiting,
   };
 }
 

@@ -39,6 +39,11 @@ CREATE TABLE IF NOT EXISTS managers (
   is_active         INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
   dashboard_enabled INTEGER NOT NULL DEFAULT 1 CHECK (dashboard_enabled IN (0, 1)),
   can_login         INTEGER NOT NULL DEFAULT 0 CHECK (can_login IN (0, 1)),
+  -- ต้องเดิน Gemba หรือไม่ — โรงงานให้เดินเฉพาะหัวหน้างาน ผู้ดูแลเลือกรายคน
+  is_walker         INTEGER NOT NULL DEFAULT 0 CHECK (is_walker IN (0, 1)),
+  -- วันประจำที่ต้องเดิน เก็บเป็น bitmask: bit 0 = อาทิตย์ … bit 6 = เสาร์
+  -- ใช้ตัวเลขตัวเดียวแทนตารางลูก เพราะมีได้แค่ 7 ค่าและไม่มีการค้นย้อนกลับจาก SQL
+  walk_days         INTEGER NOT NULL DEFAULT 0 CHECK (walk_days BETWEEN 0 AND 127),
   created_at        TEXT NOT NULL
 );
 
@@ -148,6 +153,10 @@ CREATE TABLE IF NOT EXISTS gemba_walk_records (
   ci_required     INTEGER NOT NULL DEFAULT 0 CHECK (ci_required IN (0, 1)),
   ci_ticket_no    TEXT NOT NULL DEFAULT '',
   ci_ticket_link  TEXT NOT NULL DEFAULT '',
+  -- จุดรวมปัญหา: ใช้เมื่อ has_issue = 1 เท่านั้น
+  issue_status    TEXT NOT NULL DEFAULT 'open'
+                  CHECK (issue_status IN ('open', 'acknowledged', 'closed')),
+  issue_response  TEXT NOT NULL DEFAULT '',
   completed_at    TEXT NOT NULL
 );
 
@@ -160,6 +169,8 @@ CREATE INDEX IF NOT EXISTS idx_records_area_date    ON gemba_walk_records (actua
 CREATE INDEX IF NOT EXISTS idx_records_plan         ON gemba_walk_records (plan_id);
 -- นับประเด็นที่พบ — partial index เก็บเฉพาะแถวที่มีปัญหา ซึ่งเป็นส่วนน้อย
 CREATE INDEX IF NOT EXISTS idx_records_issue        ON gemba_walk_records (actual_date) WHERE has_issue = 1;
+-- หน้าจุดรวมปัญหากรองตามสถานะ
+CREATE INDEX IF NOT EXISTS idx_records_issue_status ON gemba_walk_records (issue_status) WHERE has_issue = 1;
 
 
 -- หัวข้อของบันทึก — เก็บแยกจากแผนโดยตั้งใจ เพราะการเดินแบบ Ad-hoc ไม่มีแผนให้อ้าง
@@ -260,5 +271,8 @@ CREATE TABLE IF NOT EXISTS app_settings (
   weekly_target      INTEGER NOT NULL DEFAULT 1,
   recent_visit_days  INTEGER NOT NULL DEFAULT 7,
   company_name       TEXT NOT NULL DEFAULT '',
-  plant_name         TEXT NOT NULL DEFAULT ''
+  plant_name         TEXT NOT NULL DEFAULT '',
+  -- ผู้รับเรื่องที่จุดรวมปัญหา (managers.id) — ไม่ผูก FK เพราะ seed ใส่ตั้งค่าก่อนทะเบียนผู้ใช้
+  -- Worker ตรวจเองตอนบันทึกว่ามีคนนี้จริงและเข้าระบบได้
+  issue_owner_id     TEXT
 );

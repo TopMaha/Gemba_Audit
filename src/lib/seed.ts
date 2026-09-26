@@ -1,5 +1,8 @@
 import type { Db, WalkTheme } from './types';
-import { buildAreas, buildManagers, buildSuperusers } from './roster';
+import { buildAreas, buildManagers, buildSuperusers, managerId } from './roster';
+
+/** ผู้รับเรื่องที่จุดรวมปัญหาตั้งต้น (T-815) — ต้องตรงกับ worker/migrate-walkers-issues.sql */
+export const ISSUE_OWNER_DEFAULT = managerId('T-815');
 
 /**
  * ข้อมูลตั้งต้นตอนเปิดแอปครั้งแรก — ทะเบียนผู้ใช้/พื้นที่/หัวข้อเท่านั้น
@@ -36,6 +39,8 @@ export function buildSeedDb(): Db {
       recent_visit_days: 7,
       company_name: 'TENNECO',
       plant_name: 'TENNECO',
+      // จุดรวมปัญหา — ตอนนี้ให้ T-815 รับเรื่องไปก่อน เปลี่ยนได้ที่หน้าตั้งค่า › ระบบ
+      issue_owner_id: ISSUE_OWNER_DEFAULT,
     },
   };
 }

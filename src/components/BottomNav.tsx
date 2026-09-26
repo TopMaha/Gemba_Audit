@@ -4,6 +4,7 @@ import {
   ClipboardList,
   Grid2x2,
   History as HistoryIcon,
+  Inbox,
   LayoutDashboard,
   MoreHorizontal,
   Shield,
@@ -12,7 +13,7 @@ import {
 import { useState, type ComponentType } from 'react';
 import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog';
 import { useI18n, type TKey } from '@/lib/i18n';
-import { useSession } from '@/hooks/useData';
+import { useIssueInbox, useSession } from '@/hooks/useData';
 import { cn } from '@/lib/utils';
 
 interface Item {
@@ -30,15 +31,34 @@ const PRIMARY: Item[] = [
 const DASHBOARD: Item = { to: '/dashboard', key: 'nav.dashboard', icon: LayoutDashboard };
 
 const SECONDARY: Item[] = [
+  { to: '/issues', key: 'nav.issues', icon: Inbox },
   { to: '/coverage', key: 'nav.coverage', icon: Grid2x2 },
   { to: '/coaching', key: 'nav.coaching', icon: Users },
 ];
+
+/** ตัวเลขแจ้งเตือนบนเมนู — ปัญหาที่ยังไม่มีใครรับทราบ (เห็นเฉพาะผู้รับเรื่องและผู้ดูแล) */
+function CountBadge({ n, className }: { n: number; className?: string }) {
+  if (!n) return null;
+  return (
+    <span
+      className={cn(
+        'num grid h-[18px] min-w-[18px] place-items-center rounded-full bg-bad px-1 text-[10px] font-semibold leading-none text-white',
+        className,
+      )}
+    >
+      {n > 99 ? '99+' : n}
+    </span>
+  );
+}
 
 export function BottomNav() {
   const { t } = useI18n();
   const { session, admin } = useSession();
   const [moreOpen, setMoreOpen] = useState(false);
   const location = useLocation();
+  const { canHandle, waiting } = useIssueInbox();
+  const issueCount = canHandle ? waiting.length : 0;
+  const countFor = (to: string) => (to === '/issues' ? issueCount : 0);
 
   const canDash = session?.dashboard_enabled || admin;
   const items = canDash ? [...PRIMARY.slice(0, 2), DASHBOARD, PRIMARY[2]] : PRIMARY;
@@ -49,20 +69,22 @@ export function BottomNav() {
     <>
       {/* เดสก์ท็อป: เมนูบน */}
       <nav className="sticky top-14 z-30 hidden border-b bg-background/80 backdrop-blur md:block">
-        <div className="mx-auto flex max-w-6xl items-center gap-1 px-5 py-1.5">
+        {/* เมนูเยอะกว่าความกว้างจอเมื่อไหร่ให้เลื่อนแนวนอน ไม่ให้ชื่อเมนูตัดเป็นสองบรรทัด */}
+        <div className="scroll-x no-scrollbar mx-auto flex max-w-6xl items-center gap-1 px-5 py-1.5">
           {[...items, ...secondary].map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
               className={({ isActive }) =>
                 cn(
-                  'press focusable flex items-center gap-2 rounded-md px-3 py-2 text-[13px] font-medium',
+                  'press focusable flex shrink-0 items-center gap-2 whitespace-nowrap rounded-md px-3 py-2 text-[13px] font-medium',
                   isActive ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground',
                 )
               }
             >
               <item.icon className="h-4 w-4" />
               {t(item.key)}
+              <CountBadge n={countFor(item.to)} />
             </NavLink>
           ))}
         </div>
@@ -112,6 +134,7 @@ export function BottomNav() {
                   )}
                 />
                 <MoreHorizontal className={cn('h-[18px] w-[18px]', moreActive && 'text-accent')} />
+                <CountBadge n={issueCount} className="absolute left-1/2 top-1 ml-1.5" />
                 <span>{t('nav.more')}</span>
               </button>
             </DialogTrigger>
@@ -124,7 +147,10 @@ export function BottomNav() {
                     onClick={() => setMoreOpen(false)}
                     className="press focusable flex flex-col gap-2 rounded-md border bg-card p-4 text-sm font-medium"
                   >
-                    <item.icon className="h-5 w-5 text-accent" />
+                    <span className="flex items-center justify-between">
+                      <item.icon className="h-5 w-5 text-accent" />
+                      <CountBadge n={countFor(item.to)} />
+                    </span>
                     {t(item.key)}
                   </NavLink>
                 ))}

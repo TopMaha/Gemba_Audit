@@ -18,6 +18,13 @@ export interface Manager {
   dashboard_enabled: boolean;
   /** ได้รับสิทธิ์เข้าใช้แอปหรือไม่ — ผู้ดูแลระบบกำหนดเป็นรายคน */
   can_login: boolean;
+  /**
+   * ต้องเดิน Gemba หรือไม่ — โรงงานให้เดินเฉพาะหัวหน้างาน ไม่ใช่ทุกคนที่เข้าระบบได้
+   * ตัวเลขผลงาน (Completion · อันดับ · ตารางการเดินรายบุคคล) นับเฉพาะคนกลุ่มนี้
+   */
+  is_walker: boolean;
+  /** วันประจำที่ต้องเดินในแต่ละสัปดาห์ 0 = อาทิตย์ … 6 = เสาร์ (ว่าง = ไม่ได้กำหนดวัน) */
+  walk_days: number[];
   created_at: string;
 }
 
@@ -45,6 +52,9 @@ export interface WalkTheme {
 }
 
 export type PlanStatus = 'planned' | 'completed' | 'cancelled';
+
+/** สถานะปัญหาที่ส่งเข้าจุดรวม — รอดำเนินการ → รับทราบแล้ว → ปิดเรื่อง */
+export type IssueStatus = 'open' | 'acknowledged' | 'closed';
 
 export interface GembaPlan {
   id: string;
@@ -78,6 +88,10 @@ export interface WalkRecord {
   ci_required: boolean;
   ci_ticket_no?: string;
   ci_ticket_link?: string;
+  /** ใช้เมื่อ has_issue = true เท่านั้น */
+  issue_status: IssueStatus;
+  /** คำตอบ/การดำเนินการจากผู้รับเรื่องที่จุดรวม */
+  issue_response: string;
   completed_at: string;
 }
 
@@ -121,6 +135,8 @@ export interface AppSettings {
   recent_visit_days: number;
   company_name: string;
   plant_name: string;
+  /** ผู้รับเรื่องที่จุดรวมปัญหา (managers.id) — บันทึกที่พบปัญหาจะเด้งไปหาคนนี้ */
+  issue_owner_id: string | null;
 }
 
 export interface Db {

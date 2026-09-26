@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, ClipboardCheck, Plus, Ticket, X, Zap } from 'lucide-react';
+import { ArrowLeft, ClipboardCheck, Inbox, Plus, RotateCcw, Ticket, X, Zap } from 'lucide-react';
 import { PageTitle } from '@/components/ManagerShell';
-import { HierarchicalAreaPicker } from '@/components/HierarchicalAreaPicker';
+import { AreaPicker } from '@/components/AreaPicker';
 import { PhotoUploader } from '@/components/PhotoUploader';
 import { ThemeBadges } from '@/components/ThemeBadges';
 import { ThemePicker } from '@/components/ThemePicker';
@@ -12,9 +12,59 @@ import { Card, CardBody, CardHeader } from '@/components/ui/card';
 import { Field, Input, Textarea } from '@/components/ui/field';
 import { SwitchRow } from '@/components/ui/misc';
 import { useToast } from '@/components/ui/toast';
-import { useCoreData, useCreateRecord, useSession, useWeeklyFocus } from '@/hooks/useData';
-import { useI18n } from '@/lib/i18n';
+import { useCoreData, useCreateRecord, useIssueInbox, useSession, useWeeklyFocus } from '@/hooks/useData';
+import { managerLabel, useI18n } from '@/lib/i18n';
+import { deletePhoto } from '@/lib/photos';
 import { formatDate, nowHHMM, todayISO } from '@/lib/time';
+
+/**
+ * ร่างบันทึกที่ยังไม่ได้กดบันทึก — เก็บไว้ในเครื่องทุกครั้งที่พิมพ์/แนบรูป
+ *
+ * มือถือ Android ที่แรมน้อยมักปิดแท็บเบราว์เซอร์ทิ้งระหว่างเปิดแอปกล้อง
+ * พอถ่ายเสร็จกลับมา หน้าโหลดใหม่ ข้อความและรูปที่กรอกไว้หายหมด
+ * (ผู้ใช้เห็นว่า "ถ่ายรูปแล้วไม่ขึ้น") ร่างนี้ทำให้กลับมาแล้วทุกอย่างยังอยู่
+ * ตัวไฟล์รูปอยู่ใน IndexedDB อยู่แล้ว ร่างจึงเก็บแค่คีย์ของรูป
+ */
+interface WalkDraft {
+  date: string;
+  time: string;
+  areaId: string | null;
+  themeIds: string[];
+  observation: string;
+  hasIssue: boolean;
+  issueSummary: string;
+  photos: string[];
+  participants: string[];
+  ciNo: string;
+  ciLink: string;
+  savedAt: number;
+}
+
+/** ร่างที่ค้างนานเกินหนึ่งวันไม่น่าใช่งานเดียวกันแล้ว ทิ้งไป */
+const DRAFT_TTL_MS = 24 * 60 * 60 * 1000;
+
+function readDraft(key: string): WalkDraft | null {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const d = JSON.parse(raw) as WalkDraft;
+    if (Date.now() - d.savedAt > DRAFT_TTL_MS) {
+      localStorage.removeItem(key);
+      return null;
+    }
+    return d;
+  } catch {
+    return null;
+  }
+}
+
+function clearDraft(key: string) {
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    // ที่เก็บในเครื่องใช้ไม่ได้ ก็ไม่มีร่างให้ลบ
+  }
+}
 
 export default function WalkRecordPage() {
   const { planId } = useParams();
@@ -24,31 +74,77 @@ export default function WalkRecordPage() {
   const { session } = useSession();
   const { plans, themes, areas, pathOf } = useCoreData();
   const { data: focus } = useWeeklyFocus();
+  const { owner } = useIssueInbox();
   const createRecord = useCreateRecord();
 
   const plan = useMemo(() => plans.find((p) => p.id === planId), [plans, planId]);
   const isAdhoc = planId === 'new' || !plan;
 
-  const [date, setDate] = useState(todayISO());
-  const [time, setTime] = useState(nowHHMM());
-  const [areaId, setAreaId] = useState<string | null>(null);
-  const [themeIds, setThemeIds] = useState<string[]>([]);
-  const [observation, setObservation] = useState('');
-  const [hasIssue, setHasIssue] = useState(false);
-  const [issueSummary, setIssueSummary] = useState('');
-  const [photos, setPhotos] = useState<string[]>([]);
-  const [participants, setParticipants] = useState<string[]>([]);
+  const draftKey = `gemba.walkDraft.${session?.manager_id ?? '-'}.${planId ?? 'new'}`;
+  const [restored] = useState(() => readDraft(draftKey));
+  const [showRestored, setShowRestored] = useState(!!restored);
+
+  const [date, setDate] = useState(restored?.date ?? todayISO());
+  const [time, setTime] = useState(restored?.time ?? nowHHMM());
+  const [areaId, setAreaId] = useState<string | null>(restored?.areaId ?? null);
+  const [themeIds, setThemeIds] = useState<string[]>(restored?.themeIds ?? []);
+  const [observation, setObservation] = useState(restored?.observation ?? '');
+  const [hasIssue, setHasIssue] = useState(restored?.hasIssue ?? false);
+  const [issueSummary, setIssueSummary] = useState(restored?.issueSummary ?? '');
+  const [photos, setPhotos] = useState<string[]>(restored?.photos ?? []);
+  const [participants, setParticipants] = useState<string[]>(restored?.participants ?? []);
   const [participantDraft, setParticipantDraft] = useState('');
-  const [ciNo, setCiNo] = useState('');
-  const [ciLink, setCiLink] = useState('');
+  const [ciNo, setCiNo] = useState(restored?.ciNo ?? '');
+  const [ciLink, setCiLink] = useState(restored?.ciLink ?? '');
   const [error, setError] = useState<string | null>(null);
 
+  // ค่าจากแผนใส่ให้แค่ครั้งแรก — ของเดิมใส่ซ้ำทุกครั้งที่ซิงก์โหลดแผนใหม่
+  // ผู้ใช้ที่เปลี่ยนพื้นที่ไปแล้วจะโดนดีดกลับเป็นพื้นที่ตามแผนเองกลางคัน
+  const planApplied = useRef(!!restored);
   useEffect(() => {
-    if (plan) {
+    if (plan && !planApplied.current) {
+      planApplied.current = true;
       setAreaId(plan.area_id);
       setThemeIds(plan.theme_ids);
     }
   }, [plan]);
+
+  // เก็บร่างทุกครั้งที่มีการเปลี่ยนแปลง — เฉพาะเมื่อผู้ใช้กรอกอะไรไปแล้วจริง ๆ
+  const dirty = Boolean(observation.trim() || photos.length || participants.length || issueSummary.trim() || ciNo || hasIssue);
+  useEffect(() => {
+    if (!dirty) return;
+    const draft: WalkDraft = {
+      date, time, areaId, themeIds, observation, hasIssue, issueSummary, photos, participants, ciNo, ciLink,
+      savedAt: Date.now(),
+    };
+    try {
+      localStorage.setItem(draftKey, JSON.stringify(draft));
+    } catch {
+      // ที่เก็บเต็มหรือถูกปิด — ยังใช้งานต่อได้ แค่ไม่มีร่างสำรอง
+    }
+  }, [dirty, draftKey, date, time, areaId, themeIds, observation, hasIssue, issueSummary, photos, participants, ciNo, ciLink]);
+
+  const discardDraft = () => {
+    clearDraft(draftKey);
+    photos.forEach((k) => void deletePhoto(k));
+    setObservation('');
+    setHasIssue(false);
+    setIssueSummary('');
+    setPhotos([]);
+    setParticipants([]);
+    setCiNo('');
+    setCiLink('');
+    setDate(todayISO());
+    setTime(nowHHMM());
+    if (plan) {
+      setAreaId(plan.area_id);
+      setThemeIds(plan.theme_ids);
+    } else {
+      setAreaId(null);
+      setThemeIds([]);
+    }
+    setShowRestored(false);
+  };
 
   const addParticipant = () => {
     const name = participantDraft.trim();
@@ -83,7 +179,12 @@ export default function WalkRecordPage() {
       ci_ticket_no: ciNo,
       ci_ticket_link: ciLink,
     });
+    clearDraft(draftKey);
     toast(t('walk.done'));
+    // พบปัญหา = ส่งเข้าจุดรวมอัตโนมัติ บอกให้ผู้บันทึกรู้ว่าเรื่องไปถึงใคร
+    if (hasIssue) {
+      toast(owner ? t('issues.sentTo', { name: managerLabel(owner, lang) }) : t('issues.sentToInbox'), 'info');
+    }
     navigate('/history');
   };
 
@@ -99,6 +200,16 @@ export default function WalkRecordPage() {
         subtitle={isAdhoc ? t('walk.adhoc') : undefined}
         right={isAdhoc ? <Badge tone="steel" size="md"><Zap className="h-3 w-3" />{t('status.adhoc')}</Badge> : null}
       />
+
+      {showRestored ? (
+        <div className="mb-4 flex items-center gap-2.5 rounded-md border border-accent/40 bg-accent/[0.07] px-3 py-2.5" role="status">
+          <RotateCcw className="h-4 w-4 shrink-0 text-accent" />
+          <p className="min-w-0 flex-1 text-[13px]">{t('walk.draftRestored')}</p>
+          <Button variant="ghost" size="sm" onClick={discardDraft}>
+            {t('walk.draftDiscard')}
+          </Button>
+        </div>
+      ) : null}
 
       {plan ? (
         <Card className="mb-4" accent>
@@ -127,7 +238,7 @@ export default function WalkRecordPage() {
               </Field>
             </div>
             <Field label={t('common.area')} required>
-              <HierarchicalAreaPicker areas={areas} value={areaId} onChange={setAreaId} />
+              <AreaPicker areas={areas} value={areaId} onChange={setAreaId} />
             </Field>
             {isAdhoc ? (
               <Field label={t('plan.pickTheme')} required>
@@ -152,6 +263,12 @@ export default function WalkRecordPage() {
               <SwitchRow label={t('walk.hasIssue')} checked={hasIssue} onCheckedChange={setHasIssue} />
               {hasIssue ? (
                 <div className="mt-3 space-y-3">
+                  <p className="flex items-start gap-1.5 text-[12px] text-muted-foreground">
+                    <Inbox className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent" />
+                    {owner
+                      ? t('issues.willSendTo', { name: managerLabel(owner, lang) })
+                      : t('issues.willSendToInbox')}
+                  </p>
                   <Textarea
                     value={issueSummary}
                     onChange={(e) => setIssueSummary(e.target.value)}

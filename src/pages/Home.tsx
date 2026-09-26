@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { ArrowRight, KeyRound, Shield } from 'lucide-react';
-import { BrandMark } from '@/components/AppHeader';
+import { TennecoLogo } from '@/components/Brand';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/field';
 import { useToast } from '@/components/ui/toast';
@@ -44,8 +44,8 @@ export default function Home() {
       {/* แถบบน */}
       <div className="flex items-center gap-3 px-4 pt-safe">
         <div className="flex h-14 w-full items-center gap-2.5">
-          <BrandMark />
-          <span className="font-mono text-[13px] font-semibold uppercase tracking-[0.18em]">Gemba</span>
+          <TennecoLogo height={18} className="border" />
+          <span className="border-l pl-2.5 font-mono text-[12px] font-semibold uppercase tracking-[0.16em] text-accent">Gemba Walk</span>
           <div className="ml-auto flex h-8 items-center rounded-md border bg-card p-0.5">
             {(['th', 'en'] as const).map((l) => (
               <button
@@ -66,7 +66,7 @@ export default function Home() {
         {/* ฝั่งซ้าย: ข้อความหลัก */}
         <div className="stagger">
           <div className="mb-4 flex items-center gap-2">
-            <span className="hazard h-[3px] w-12 rounded-full" />
+            <span className="brand-bar h-[3px] w-12 rounded-full" />
             <span className="label-micro">{t('home.tagline')}</span>
           </div>
           <h1 className="text-[clamp(2.4rem,9vw,4.2rem)] font-bold leading-[0.95] tracking-tight">
@@ -92,7 +92,7 @@ export default function Home() {
 
         {/* ฝั่งขวา: เข้าสู่ระบบ */}
         <div className="panel animate-fade-up overflow-hidden">
-          <div className="hazard h-[3px] w-full" />
+          <div className="brand-bar h-[3px] w-full" />
           <form onSubmit={submit} className="p-5 sm:p-6">
             <div className="mb-1 flex items-center gap-2">
               <KeyRound className="h-4 w-4 text-accent" />

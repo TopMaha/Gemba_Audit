@@ -10,11 +10,11 @@
  * จะได้ข้อมูลเก่าค้างโดยที่แอปไม่รู้ตัว ซึ่งอันตรายกว่าการไม่มีข้อมูล
  */
 
-const VERSION = 'gemba-v1';
+const VERSION = 'gemba-v2';
 const SHELL = `${VERSION}-shell`;
 
 // ไฟล์ขั้นต่ำที่ต้องมีเพื่อให้แอปเปิดขึ้นมาได้
-const PRECACHE = ['/', '/index.html', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png'];
+const PRECACHE = ['/', '/index.html', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png', '/brand/tenneco-logo.png'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(

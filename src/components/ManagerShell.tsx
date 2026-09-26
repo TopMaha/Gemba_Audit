@@ -1,6 +1,7 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { AppHeader } from './AppHeader';
 import { BottomNav } from './BottomNav';
+import { IssueAlert } from './IssueAlert';
 import { useSession, useSessionGuard } from '@/hooks/useData';
 
 /** โครงหน้าจอของผู้ใช้ที่เข้าสู่ระบบแล้ว + ตรวจสอบสิทธิ์ */
@@ -20,6 +21,7 @@ export function ManagerShell() {
       <main className="mx-auto w-full max-w-6xl flex-1 px-3 pb-28 pt-4 sm:px-5 md:pb-10">
         <Outlet />
       </main>
+      <IssueAlert />
     </div>
   );
 }

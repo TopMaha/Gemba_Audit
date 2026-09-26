@@ -1,6 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { adherence, bandOf, overallCompletion, rankManagers, themeCompletion } from '../calc';
-import type { GembaPlan, Manager, WalkRecord } from '../types';
+import {
+  adherence,
+  bandOf,
+  dayStatus,
+  openIssues,
+  overallCompletion,
+  pickWalkers,
+  rankManagers,
+  themeCompletion,
+  walkerWeek,
+} from '../calc';
+import { sortAreas } from '../areaTree';
+import { rangeDays } from '../time';
+import type { Area, GembaPlan, Manager, WalkRecord } from '../types';
 
 const mgr = (id: string, active = true): Manager => ({
   id,
@@ -11,6 +23,8 @@ const mgr = (id: string, active = true): Manager => ({
   is_active: active,
   dashboard_enabled: true,
   can_login: true,
+  is_walker: false,
+  walk_days: [],
   created_at: '2026-01-01T00:00:00.000Z',
 });
 
@@ -39,6 +53,8 @@ const rec = (id: string, manager_id: string, date: string, theme_ids: string[]):
   photo_urls: [],
   participant_names: [],
   ci_required: false,
+  issue_status: 'open',
+  issue_response: '',
   completed_at: `${date}T09:30:00.000Z`,
 });
 
@@ -130,5 +146,92 @@ describe('อันดับผู้จัดการ', () => {
     expect(rows[0].rank).toBe(1);
     expect(rows[1].rank).toBe(2);
     expect(rows[2].rank).toBe(2);
+  });
+});
+
+describe('ผู้ต้องเดิน Gemba', () => {
+  it('นับเฉพาะคนที่ถูกกำหนดให้เดิน และข้ามคนที่ปิดบัญชี', () => {
+    const list = [
+      { ...mgr('m1'), is_walker: true },
+      { ...mgr('m2'), is_walker: true, is_active: false },
+      mgr('m3'),
+    ];
+    const { walkers, configured } = pickWalkers(list);
+    expect(configured).toBe(true);
+    expect(walkers.map((m) => m.id)).toEqual(['m1']);
+  });
+
+  it('ยังไม่กำหนดใคร → ใช้คนที่เข้าระบบได้แทน ไม่ใช่พนักงานทั้งหมด', () => {
+    const list = [mgr('m1'), { ...mgr('m2'), can_login: false }, mgr('m3', false)];
+    const { walkers, configured } = pickWalkers(list);
+    expect(configured).toBe(false);
+    expect(walkers.map((m) => m.id)).toEqual(['m1']);
+  });
+
+  it('Completion ใช้จำนวนผู้ต้องเดินเป็นตัวหาร', () => {
+    const walkers = [mgr('m1'), mgr('m2')];
+    const [row] = themeCompletion(['th_01'], [rec('r1', 'm1', '2026-08-18', ['th_01'])], walkers, '2026-08-16', '2026-08-22');
+    expect(row.plan).toBe(2);
+    expect(row.pct).toBe(50);
+  });
+});
+
+describe('ตารางเดินรายบุคคล', () => {
+  // สัปดาห์ 16–22 ส.ค. 2026 (อาทิตย์–เสาร์) · วันนี้ = พุธ 19
+  const week = rangeDays('2026-08-16', '2026-08-22');
+  const today = '2026-08-19';
+
+  it('สถานะของแต่ละช่อง', () => {
+    expect(dayStatus(true, 1, '2026-08-17', today)).toBe('done');
+    expect(dayStatus(true, 0, '2026-08-17', today)).toBe('missed');
+    expect(dayStatus(true, 0, today, today)).toBe('due');
+    expect(dayStatus(false, 2, '2026-08-18', today)).toBe('extra');
+    expect(dayStatus(false, 0, '2026-08-18', today)).toBe('none');
+  });
+
+  it('วันประจำ จ./พ./ศ. — เดินวันจันทร์ ขาดไม่มี เป้า 3 ครั้ง', () => {
+    const me = { ...mgr('m1'), is_walker: true, walk_days: [1, 3, 5] };
+    const res = walkerWeek(me, [rec('r1', 'm1', '2026-08-17', ['th_01'])], week, 1, today);
+    expect(res.target).toBe(3);
+    expect(res.done).toBe(1);
+    expect(res.missed).toBe(0);
+    expect(res.days.map((d) => d.status)).toEqual(['none', 'done', 'none', 'due', 'none', 'due', 'none']);
+  });
+
+  it('วันประจำที่ผ่านไปแล้วไม่ได้เดิน = ขาด · ไม่กำหนดวันใช้เป้าของระบบ', () => {
+    const scheduled = { ...mgr('m1'), walk_days: [1] };
+    expect(walkerWeek(scheduled, [], week, 1, today).missed).toBe(1);
+    expect(walkerWeek(mgr('m2'), [], week, 2, today).target).toBe(2);
+  });
+});
+
+describe('จุดรวมปัญหา', () => {
+  it('เฉพาะที่พบปัญหาและยังไม่ปิด เรียงจากค้างนานสุด', () => {
+    const issue = (id: string, date: string, status: WalkRecord['issue_status']) => ({
+      ...rec(id, 'm1', date, ['th_01']),
+      has_issue: true,
+      issue_status: status,
+    });
+    const list = openIssues([
+      issue('a', '2026-08-18', 'open'),
+      issue('b', '2026-08-10', 'acknowledged'),
+      issue('c', '2026-08-01', 'closed'),
+      rec('d', 'm1', '2026-08-01', ['th_01']),
+    ]);
+    expect(list.map((r) => r.id)).toEqual(['b', 'a']);
+  });
+});
+
+describe('ลำดับพื้นที่', () => {
+  it('VSM1–4 · QC · OFFICE ตามลำดับโรงงาน พื้นที่อื่นต่อท้าย', () => {
+    const area = (id: string, name: string): Area => ({ id, area_name: name, parent_id: null, department: '', is_active: true });
+    const sorted = sortAreas([
+      area('ar_office', 'OFFICE'),
+      area('ar_x', 'ALPHA'),
+      area('ar_qc', 'QC'),
+      area('ar_vsm2', 'VSM2'),
+      area('ar_vsm1', 'VSM1'),
+    ]);
+    expect(sorted.map((a) => a.id)).toEqual(['ar_vsm1', 'ar_vsm2', 'ar_qc', 'ar_office', 'ar_x']);
   });
 });

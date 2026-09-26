@@ -23,6 +23,13 @@ const SEP = '\u0001';
 
 export const toBool = (v) => v === 1 || v === true;
 
+/**
+ * วันประจำที่ต้องเดิน — ฐานข้อมูลเก็บเป็น bitmask (bit 0 = อาทิตย์ … bit 6 = เสาร์)
+ * แต่หน้าเว็บใช้เป็นอาร์เรย์ของเลขวัน เช่น [1, 3, 5] = จ. พ. ศ.
+ */
+export const daysFromMask = (mask) => [0, 1, 2, 3, 4, 5, 6].filter((d) => ((mask ?? 0) >> d) & 1);
+export const maskFromDays = (days) => days.reduce((m, d) => m | (1 << d), 0);
+
 export function mapManager(r) {
   return {
     id: r.id,
@@ -35,6 +42,8 @@ export function mapManager(r) {
     is_active: toBool(r.is_active),
     dashboard_enabled: toBool(r.dashboard_enabled),
     can_login: toBool(r.can_login),
+    is_walker: toBool(r.is_walker),
+    walk_days: daysFromMask(r.walk_days),
     created_at: r.created_at,
   };
 }
@@ -94,6 +103,8 @@ export function mapRecord(r) {
     ci_required: toBool(r.ci_required),
     ci_ticket_no: r.ci_ticket_no ?? '',
     ci_ticket_link: r.ci_ticket_link ?? '',
+    issue_status: r.issue_status ?? 'open',
+    issue_response: r.issue_response ?? '',
     completed_at: r.completed_at,
   };
 }
@@ -141,6 +152,7 @@ export function mapSettings(r) {
     recent_visit_days: r.recent_visit_days,
     company_name: r.company_name,
     plant_name: r.plant_name,
+    issue_owner_id: r.issue_owner_id ?? null,
   };
 }
 

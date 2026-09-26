@@ -1,5 +1,5 @@
 import type { Area, GembaPlan, Manager, WalkRecord } from './types';
-import { diffDays, inRange, todayISO, type ISODate } from './time';
+import { diffDays, inRange, todayISO, weekdayIndex, type ISODate } from './time';
 
 /**
  * ── Adherence: จำนวนแผนที่เดินแล้ว ÷ แผนทั้งหมดในช่วง × 100
@@ -38,7 +38,7 @@ export function adherence(
   };
 }
 
-/** ── Completion รายหัวข้อ: นับ "คน" ไม่ซ้ำ เทียบกับพนักงาน Active ทั้งหมด */
+/** ── Completion รายหัวข้อ: นับ "คน" ไม่ซ้ำ เทียบกับผู้ต้องเดินทั้งหมด (ดู pickWalkers) */
 export interface ThemeCompletionRow {
   theme_id: string;
   plan: number;
@@ -51,12 +51,12 @@ export interface ThemeCompletionRow {
 export function themeCompletion(
   themeIds: string[],
   records: WalkRecord[],
-  activeManagers: Manager[],
+  walkers: Manager[],
   from: ISODate,
   to: ISODate,
 ): ThemeCompletionRow[] {
   const inScope = records.filter((r) => inRange(r.actual_date, from, to));
-  const activeIds = activeManagers.map((m) => m.id);
+  const activeIds = walkers.map((m) => m.id);
 
   return themeIds.map((themeId) => {
     const doneSet = new Set(
@@ -199,4 +199,83 @@ export function recentVisitWarning(
   if (!last) return null;
   const days = diffDays(last, today);
   return days <= withinDays ? { last, days } : null;
+}
+
+/* ── ผู้ต้องเดิน Gemba + ตารางเดินรายบุคคล ───────────────────────────────── */
+
+/**
+ * คนที่ต้องเดิน Gemba — ใช้เป็นฐานของตัวเลขผลงานทุกตัว
+ *
+ * โรงงานให้เดินเฉพาะหัวหน้างาน ผู้ดูแลระบบจึงเป็นคนกำหนดรายคน (is_walker)
+ * ระหว่างที่ยังไม่ได้กำหนดใครเลย ใช้ "ทุกคนที่มีสิทธิ์เข้าระบบ" แทน
+ * ไม่ใช้พนักงาน Active ทั้งหมด เพราะคนเกือบทั้งทะเบียนไม่ได้เดิน Gemba
+ * ถ้าเอามาเป็นตัวหาร Completion จะต่ำผิดจริงไปหลายเท่า
+ */
+export function pickWalkers(managers: Manager[]): { walkers: Manager[]; configured: boolean } {
+  const active = managers.filter((m) => m.is_active);
+  const assigned = active.filter((m) => m.is_walker);
+  if (assigned.length) return { walkers: assigned, configured: true };
+  return { walkers: active.filter((m) => m.can_login), configured: false };
+}
+
+/** เป้าหมายต่อสัปดาห์ของแต่ละคน = จำนวนวันประจำที่กำหนด ถ้าไม่ได้กำหนดวันใช้ค่ากลางของระบบ */
+export function weeklyTargetOf(manager: Pick<Manager, 'walk_days'>, fallback: number): number {
+  return manager.walk_days.length || fallback;
+}
+
+/**
+ * สถานะของหนึ่งช่องในตารางเดินรายบุคคล
+ *   done   = วันประจำ และเดินแล้ว
+ *   missed = วันประจำที่ผ่านไปแล้วแต่ยังไม่ได้เดิน
+ *   due    = วันประจำที่ยังมาไม่ถึง (รวมวันนี้ที่ยังไม่ได้เดิน)
+ *   extra  = ไม่ใช่วันประจำ แต่เดิน
+ *   none   = ไม่ใช่วันประจำ และไม่ได้เดิน
+ */
+export type DayStatus = 'done' | 'missed' | 'due' | 'extra' | 'none';
+
+export function dayStatus(scheduled: boolean, walks: number, date: ISODate, today: ISODate = todayISO()): DayStatus {
+  if (scheduled) {
+    if (walks > 0) return 'done';
+    return date < today ? 'missed' : 'due';
+  }
+  return walks > 0 ? 'extra' : 'none';
+}
+
+export interface WalkerWeek {
+  days: { date: ISODate; scheduled: boolean; walks: number; status: DayStatus }[];
+  /** จำนวนครั้งที่ต้องเดินในสัปดาห์นี้ */
+  target: number;
+  /** จำนวนครั้งที่เดินจริง (นับทุกครั้ง ไม่ว่าจะตรงวันประจำหรือไม่) */
+  done: number;
+  /** วันประจำที่ผ่านไปแล้วแต่ไม่ได้เดิน */
+  missed: number;
+}
+
+/** ผลการเดินหนึ่งสัปดาห์ของหนึ่งคน เทียบกับวันประจำที่กำหนดไว้ */
+export function walkerWeek(
+  manager: Pick<Manager, 'id' | 'walk_days'>,
+  records: WalkRecord[],
+  weekDays: ISODate[],
+  fallbackTarget: number,
+  today: ISODate = todayISO(),
+): WalkerWeek {
+  const mine = records.filter((r) => r.manager_id === manager.id);
+  const days = weekDays.map((date) => {
+    const scheduled = manager.walk_days.includes(weekdayIndex(date));
+    const walks = mine.filter((r) => r.actual_date === date).length;
+    return { date, scheduled, walks, status: dayStatus(scheduled, walks, date, today) };
+  });
+  return {
+    days,
+    target: weeklyTargetOf(manager, fallbackTarget),
+    done: days.reduce((s, d) => s + d.walks, 0),
+    missed: days.filter((d) => d.status === 'missed').length,
+  };
+}
+
+/** ปัญหาที่ยังไม่ปิด — เรียงจากค้างนานสุดก่อน เพราะควรถูกจัดการก่อน */
+export function openIssues(records: WalkRecord[]): WalkRecord[] {
+  return records
+    .filter((r) => r.has_issue && r.issue_status !== 'closed')
+    .sort((a, b) => a.actual_date.localeCompare(b.actual_date) || a.actual_time.localeCompare(b.actual_time));
 }

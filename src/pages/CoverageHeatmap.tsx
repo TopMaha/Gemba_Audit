@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { CalendarPlus, Grid2x2, MapPin } from 'lucide-react';
+import { CalendarPlus, Grid2x2, MapPin, Users } from 'lucide-react';
 import { PageTitle } from '@/components/ManagerShell';
 import { PlanEditor } from '@/components/PlanEditor';
 import { Badge } from '@/components/ui/badge';
@@ -32,8 +32,6 @@ export default function CoverageHeatmap() {
   const visited = leafRows.filter((r) => r.visits > 0).length;
   const totalVisits = leafRows.reduce((s, r) => s + r.visits, 0);
   const maxVisits = Math.max(1, ...leafRows.map((r) => r.visits));
-
-  const roots = areas.filter((a) => !a.parent_id && a.is_active);
 
   return (
     <div>
@@ -76,7 +74,9 @@ export default function CoverageHeatmap() {
                   <MapPin className="h-4 w-4 shrink-0 text-accent" />
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-[13px] font-medium">{areaLabel(r.area, lang)}</div>
-                    <div className="truncate text-[11px] text-muted-foreground">{r.path}</div>
+                    {r.path !== areaLabel(r.area, lang) ? (
+                      <div className="truncate text-[11px] text-muted-foreground">{r.path}</div>
+                    ) : null}
                   </div>
                   <div className="shrink-0 text-right">
                     {r.lastVisit ? (
@@ -97,55 +97,60 @@ export default function CoverageHeatmap() {
             </CardBody>
           </Card>
 
-          {/* แผนที่ความถี่ */}
-          {roots.map((root) => {
-            const children = leafRows.filter((r) => r.path.startsWith(areaLabel(root, lang)));
-            if (!children.length) return null;
-            return (
-              <section key={root.id}>
-                <SectionTitle
-                  right={
-                    <span className="num text-[11px] text-muted-foreground">
-                      {children.reduce((s, c) => s + c.visits, 0)} {t('coverage.visits')}
-                    </span>
-                  }
-                >
-                  {areaLabel(root, lang)}
-                </SectionTitle>
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-                  {children.map((r) => {
-                    const ratio = r.visits / maxVisits;
-                    return (
-                      <div
-                        key={r.area.id}
-                        className={cn(
-                          'relative overflow-hidden rounded-md border p-3',
-                          r.visits === 0 && 'border-dashed',
-                        )}
-                        style={{
-                          background:
-                            r.visits === 0
-                              ? undefined
-                              : `color-mix(in srgb, hsl(var(--accent)) ${Math.round(12 + ratio * 55)}%, hsl(var(--card)))`,
-                        }}
-                      >
-                        <div className="truncate text-[13px] font-medium">{areaLabel(r.area, lang)}</div>
-                        <div className="mt-1.5 flex items-baseline gap-1">
-                          <span className="num text-xl font-semibold leading-none">{r.visits}</span>
-                          <span className="text-[10px] text-muted-foreground">{t('coverage.visits')}</span>
-                        </div>
-                        <div className="num mt-1 text-[10px] text-muted-foreground">
-                          {r.lastVisit
-                            ? `${t('coverage.lastVisit')}: ${formatDate(r.lastVisit, lang, { noYear: true })}`
-                            : t('coverage.neverVisited')}
-                        </div>
+          {/* แผนที่ความถี่ — พื้นที่ของโรงงานมี 6 แห่ง จึงวางเป็นกริดเดียว */}
+          <section>
+            <SectionTitle
+              right={
+                <span className="num text-[11px] text-muted-foreground">
+                  {totalVisits} {t('coverage.visits')}
+                </span>
+              }
+            >
+              {t('coverage.frequency')}
+            </SectionTitle>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+              {leafRows.map((r) => {
+                const ratio = r.visits / maxVisits;
+                // ช่องที่เข้มมากใช้ตัวอักษรขาว ไม่งั้นตัวเลขจะจมหายไปในสีน้ำเงิน
+                const strong = r.visits > 0 && ratio > 0.6;
+                return (
+                  <div
+                    key={r.area.id}
+                    className={cn(
+                      'relative overflow-hidden rounded-md border p-3',
+                      r.visits === 0 && 'border-dashed bg-card',
+                      strong && 'border-transparent text-white',
+                    )}
+                    style={{
+                      background:
+                        r.visits === 0
+                          ? undefined
+                          : `color-mix(in srgb, hsl(var(--accent)) ${Math.round(12 + ratio * 78)}%, hsl(var(--card)))`,
+                    }}
+                  >
+                    <div className="truncate text-[15px] font-semibold tracking-wide">{areaLabel(r.area, lang)}</div>
+                    <div className="mt-2 flex items-baseline gap-1">
+                      <span className="num text-2xl font-semibold leading-none">{r.visits}</span>
+                      <span className={cn('text-[11px]', strong ? 'text-white/85' : 'text-muted-foreground')}>
+                        {t('coverage.visits')}
+                      </span>
+                    </div>
+                    <div className={cn('num mt-1.5 text-[11px]', strong ? 'text-white/85' : 'text-muted-foreground')}>
+                      {r.lastVisit
+                        ? `${t('coverage.lastVisit')}: ${formatDate(r.lastVisit, lang, { noYear: true })}`
+                        : t('coverage.neverVisited')}
+                    </div>
+                    {r.managers ? (
+                      <div className={cn('mt-0.5 flex items-center gap-1 text-[11px]', strong ? 'text-white/85' : 'text-muted-foreground')}>
+                        <Users className="h-3 w-3" />
+                        <span className="num">{r.managers}</span> {t('common.people')}
                       </div>
-                    );
-                  })}
-                </div>
-              </section>
-            );
-          })}
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          </section>
 
           {!leafRows.length ? <EmptyState icon={<Grid2x2 className="h-8 w-8" />} title={t('common.noData')} /> : null}
         </div>

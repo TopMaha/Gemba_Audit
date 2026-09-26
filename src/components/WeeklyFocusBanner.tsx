@@ -11,7 +11,7 @@ export function WeeklyFocusBanner({ focus, themes }: { focus?: WeeklyFocus | nul
 
   return (
     <div className="relative mb-4 overflow-hidden rounded-lg border border-accent/40 bg-accent/[0.07] animate-fade-up">
-      <div className="hazard absolute inset-y-0 left-0 w-[5px]" />
+      <div className="brand-bar absolute inset-y-0 left-0 w-[5px]" />
       <div className="py-3 pl-5 pr-4">
         <div className="flex items-center gap-2">
           <Megaphone className="h-4 w-4 text-accent" />

@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { CalendarPlus, ClipboardList, Clock, MapPin, Pencil, Play, Plus, Zap } from 'lucide-react';
 import { PageTitle } from '@/components/ManagerShell';
+import { MyWeekCard } from '@/components/MyWeekCard';
 import { PlanEditor } from '@/components/PlanEditor';
 import { ThemeBadges } from '@/components/ThemeBadges';
 import { WeeklyFocusBanner } from '@/components/WeeklyFocusBanner';
@@ -94,6 +95,7 @@ export default function Plan() {
       />
 
       <WeeklyFocusBanner focus={focus} themes={themes} />
+      <MyWeekCard />
 
       <div className="scroll-x no-scrollbar -mx-3 mb-4 flex gap-1.5 px-3 sm:mx-0 sm:px-0">
         {filters.map((f) => (

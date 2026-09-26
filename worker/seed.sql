@@ -5,7 +5,7 @@
 --  ที่มาของข้อมูล
 --    ผู้ใช้/ผู้ดูแล  ตาราง employees ในฐานข้อมูล psif-db ของโปรเจค PSIF
 --                   (393 คน — ตัดแถว RESIGNED-* ที่เป็นช่องว่างสำหรับพนักงานลาออกออกแล้ว)
---    พื้นที่เดิน     แผนก/สายการผลิตจริง 20 แห่งจากชุดข้อมูลเดียวกัน
+--    พื้นที่เดิน     6 แห่งตามที่โรงงานกำหนด: VSM1 · VSM2 · VSM3 · VSM4 · QC · OFFICE
 --
 --  รหัสเข้าระบบ = รหัสพนักงาน เช่น T-815 · L-3611 · PST742 · M-089
 --  รหัสเข้าหน้า /admin = รหัสพนักงานของผู้ดูแลระบบ 4 คน (ดูส่วน "ผู้ดูแลระบบ")
@@ -40,29 +40,14 @@ INSERT OR IGNORE INTO walk_themes (id, theme_name, theme_name_en, is_active) VAL
   ('th_08', '8-การมีส่วนร่วมของพนักงาน', '8-People Engagement', 1);
 
 
--- ── พื้นที่เดิน 20 แห่ง = แผนก/สายการผลิตจริง ───────────────────────────────
--- ทุกแห่งเป็นระดับบนสุด (parent_id = NULL) แบ่งพื้นที่ย่อยเพิ่มได้ในหน้าตั้งค่า
+-- ── พื้นที่เดิน 6 แห่ง (เรียงตามลำดับที่แอปแสดงผล) ───────────────────────────
 INSERT OR IGNORE INTO areas (id, area_name, area_name_en, parent_id, department, is_active) VALUES
-  ('ar_vsm1', 'สายการผลิต VSM1', 'VSM1', NULL, 'VSM1', 1),
-  ('ar_vsm2', 'สายการผลิต VSM2', 'VSM2', NULL, 'VSM2', 1),
-  ('ar_vsm3', 'สายการผลิต VSM3', 'VSM3', NULL, 'VSM3', 1),
-  ('ar_vsm4', 'สายการผลิต VSM4', 'VSM4', NULL, 'VSM4', 1),
-  ('ar_qc', 'ควบคุมคุณภาพ', 'Quality Control', NULL, 'Quality Control', 1),
-  ('ar_qa', 'ประกันคุณภาพ', 'Quality Assurance', NULL, 'Quality Assurance', 1),
-  ('ar_maint', 'ซ่อมบำรุง', 'Maintenance', NULL, 'Maintenance', 1),
-  ('ar_proc', 'วิศวกรรมกระบวนการ', 'Process Engineer', NULL, 'Process Engineer', 1),
-  ('ar_eng', 'วิศวกรรม', 'Engineer', NULL, 'Engineer', 1),
-  ('ar_wh', 'คลังสินค้า', 'Warehouse', NULL, 'Warehouse', 1),
-  ('ar_store', 'สโตร์/คลังอะไหล่', 'Store', NULL, 'Store', 1),
-  ('ar_pc', 'วางแผนการผลิต', 'Production Control', NULL, 'PC', 1),
-  ('ar_lean', 'ลีน', 'Lean', NULL, 'Lean', 1),
-  ('ar_ehs', 'ความปลอดภัยและสิ่งแวดล้อม', 'EHS', NULL, 'EHS', 1),
-  ('ar_hr', 'ทรัพยากรบุคคล', 'Human Resources', NULL, 'HR', 1),
-  ('ar_it', 'เทคโนโลยีสารสนเทศ', 'IT', NULL, 'IT', 1),
-  ('ar_acc', 'บัญชีและการเงิน', 'Accounting', NULL, 'Accounting', 1),
-  ('ar_pur', 'จัดซื้อ', 'Purchasing', NULL, 'Purchasing', 1),
-  ('ar_prog', 'โปรแกรมงานใหม่', 'Program', NULL, 'Program', 1),
-  ('ar_cs', 'ลูกค้าสัมพันธ์', 'Customer Service', NULL, 'Customer Service', 1);
+  ('ar_vsm1', 'VSM1', 'VSM1', NULL, 'VSM1', 1),
+  ('ar_vsm2', 'VSM2', 'VSM2', NULL, 'VSM2', 1),
+  ('ar_vsm3', 'VSM3', 'VSM3', NULL, 'VSM3', 1),
+  ('ar_vsm4', 'VSM4', 'VSM4', NULL, 'VSM4', 1),
+  ('ar_qc', 'QC', 'QC', NULL, 'Quality Control', 1),
+  ('ar_office', 'OFFICE', 'OFFICE', NULL, 'Office', 1);
 
 
 -- ── ผู้ใช้ 393 คน จากทะเบียนพนักงาน PSIF ──────────────────────────────────
@@ -470,3 +455,12 @@ VALUES
   ('mgr_T_815', 'T-815', 'นายวิภาวัส จันทะคาม', NULL, 'VSM4', 'ผู้ดูแลระบบ', NULL, 1, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('mgr_T_816', 'T-816', 'ภาสกร อิ่มบูรณาประวัติ', NULL, 'VSM1', 'หัวหน้าทีม', NULL, 1, 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('mgr_Temp117', 'Temp117', 'นายคมกริช มุ่งงาม', NULL, 'VSM4', 'พนักงาน', NULL, 0, 1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+
+
+-- ── จุดรวมปัญหา: ผู้รับเรื่องตั้งต้น = T-815 (เปลี่ยนได้ที่หน้าตั้งค่า › ระบบ) ──
+-- ใส่ท้ายไฟล์เพราะต้องมีทะเบียนผู้ใช้ก่อน · ไม่ทับค่าที่ผู้ดูแลตั้งไว้แล้ว
+UPDATE app_settings
+   SET issue_owner_id = 'mgr_T_815'
+ WHERE id = 1
+   AND issue_owner_id IS NULL
+   AND EXISTS (SELECT 1 FROM managers WHERE id = 'mgr_T_815');

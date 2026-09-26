@@ -1,5 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom';
-import { LogOut, Moon, Palette, Shield, Sun } from 'lucide-react';
+import { LogOut, Moon, Shield, Sun } from 'lucide-react';
 import { useState } from 'react';
 import { Avatar, Popover, PopoverContent, PopoverTrigger } from '@/components/ui/misc';
 import { Button } from '@/components/ui/button';
@@ -7,34 +7,22 @@ import { useI18n, managerLabel } from '@/lib/i18n';
 import { useSession, useSettings } from '@/hooks/useData';
 import { logoutAdmin } from '@/lib/api';
 import { endSession } from '@/lib/session';
-import { ACCENTS, applyTheme, getAccent, getMode, type Accent, type Mode } from '@/lib/theme';
+import { applyTheme, getMode, type Mode } from '@/lib/theme';
 import { cn } from '@/lib/utils';
 import { SyncBadge } from '@/components/SyncBadge';
-
-export function BrandMark({ className }: { className?: string }) {
-  return (
-    <span className={cn('grid h-8 w-8 shrink-0 place-items-center overflow-hidden rounded-[5px] border bg-primary', className)}>
-      <span className="hazard h-full w-full opacity-90" />
-    </span>
-  );
-}
+import { TennecoLogo } from '@/components/Brand';
 
 export function AppHeader() {
   const { t, lang, setLang } = useI18n();
   const { session, admin } = useSession();
   const { data: settings } = useSettings();
   const navigate = useNavigate();
-  const [accent, setAccentState] = useState<Accent>(() => getAccent());
   const [mode, setModeState] = useState<Mode>(() => getMode());
 
-  const setAccent = (a: Accent) => {
-    setAccentState(a);
-    applyTheme(a, mode);
-  };
   const toggleMode = () => {
     const next: Mode = mode === 'dark' ? 'light' : 'dark';
     setModeState(next);
-    applyTheme(accent, next);
+    applyTheme(next);
   };
 
   const signOut = async () => {
@@ -45,12 +33,12 @@ export function AppHeader() {
   };
 
   return (
-    <header className="sticky top-0 z-40 border-b bg-background/85 backdrop-blur-md pt-safe">
+    <header className="sticky top-0 z-40 border-b bg-card/90 backdrop-blur-md pt-safe">
       <div className="mx-auto flex h-14 max-w-6xl items-center gap-3 px-3 sm:px-5">
         <Link to={session ? '/plan' : '/'} className="focusable flex min-w-0 items-center gap-2.5 rounded-md">
-          <BrandMark />
-          <span className="min-w-0 leading-none">
-            <span className="block font-mono text-[13px] font-semibold uppercase tracking-[0.16em]">Gemba</span>
+          <TennecoLogo height={16} className="border" />
+          <span className="hidden min-w-0 border-l pl-2.5 leading-none min-[400px]:block">
+            <span className="block font-mono text-[12px] font-semibold uppercase tracking-[0.14em] text-accent">Gemba Walk</span>
             <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">
               {settings?.plant_name ?? t('app.subtitle')}
             </span>
@@ -77,34 +65,16 @@ export function AppHeader() {
             ))}
           </div>
 
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button variant="outline" size="iconSm" aria-label="Appearance">
-                <Palette className="h-4 w-4" />
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent align="end" className="w-56 p-3">
-              <div className="label-micro mb-2">Accent</div>
-              <div className="mb-3 flex gap-2">
-                {ACCENTS.map((a) => (
-                  <button
-                    key={a.id}
-                    onClick={() => setAccent(a.id)}
-                    title={a.label}
-                    className={cn(
-                      'press focusable h-8 flex-1 rounded-md border-2',
-                      accent === a.id ? 'border-foreground' : 'border-transparent',
-                    )}
-                    style={{ background: a.swatch }}
-                  />
-                ))}
-              </div>
-              <Button variant="outline" size="sm" className="w-full" onClick={toggleMode}>
-                {mode === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-                {mode === 'dark' ? 'Light mode' : 'Dark mode'}
-              </Button>
-            </PopoverContent>
-          </Popover>
+          <Button
+            variant="outline"
+            size="iconSm"
+            className="h-9 w-9"
+            onClick={toggleMode}
+            aria-label={mode === 'dark' ? 'Light mode' : 'Dark mode'}
+            title={mode === 'dark' ? 'Light mode' : 'Dark mode'}
+          >
+            {mode === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+          </Button>
 
           {session ? (
             <Popover>
@@ -147,7 +117,7 @@ export function AppHeader() {
           ) : null}
         </div>
       </div>
-      <div className="hazard h-[2px] w-full opacity-80" />
+      <div className="brand-bar h-[3px] w-full" />
     </header>
   );
 }

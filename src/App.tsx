@@ -8,6 +8,7 @@ import CoverageHeatmap from '@/pages/CoverageHeatmap';
 import Dashboard from '@/pages/Dashboard';
 import History from '@/pages/History';
 import Home from '@/pages/Home';
+import Issues from '@/pages/Issues';
 import Plan from '@/pages/Plan';
 import Report from '@/pages/Report';
 import Settings from '@/pages/Settings';
@@ -27,6 +28,7 @@ export default function App() {
         <Route path="/coaching" element={<Coaching />} />
         <Route path="/coaching/:managerId" element={<CoachingDetail />} />
         <Route path="/history" element={<History />} />
+        <Route path="/issues" element={<Issues />} />
         <Route path="/walk/:planId" element={<WalkRecordPage />} />
         <Route path="/admin/settings" element={<Settings />} />
         <Route path="/admin/report" element={<Report />} />

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Shield } from 'lucide-react';
-import { BrandMark } from '@/components/AppHeader';
+import { TennecoLogo } from '@/components/Brand';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/field';
 import { useToast } from '@/components/ui/toast';
@@ -40,10 +40,10 @@ export default function AdminGate() {
       </Link>
 
       <div className="panel overflow-hidden">
-        <div className="hazard h-[3px] w-full" />
+        <div className="brand-bar h-[3px] w-full" />
         <form onSubmit={submit} className="p-6">
           <div className="mb-1 flex items-center gap-2.5">
-            <BrandMark />
+            <TennecoLogo height={14} className="border" />
             <h1 className="text-lg font-semibold">{t('auth.adminTitle')}</h1>
           </div>
           <p className="mb-5 text-[13px] text-muted-foreground">{t('admin.gateHint')}</p>

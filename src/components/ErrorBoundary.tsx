@@ -38,7 +38,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, { error: E
     return (
       <div className="relative z-10 mx-auto flex min-h-[100dvh] max-w-md flex-col justify-center px-5">
         <div className="panel overflow-hidden">
-          <div className="hazard h-[3px] w-full" />
+          <div className="brand-bar h-[3px] w-full" />
           <div className="p-6">
             <h1 className="text-lg font-semibold">เปิดหน้าจอไม่สำเร็จ</h1>
             <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">
