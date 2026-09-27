@@ -10,18 +10,30 @@
  * จะได้ข้อมูลเก่าค้างโดยที่แอปไม่รู้ตัว ซึ่งอันตรายกว่าการไม่มีข้อมูล
  */
 
-const VERSION = 'gemba-v2';
+// ขึ้นเลขเมื่อไฟล์ใน PRECACHE เปลี่ยน — แคชเก่าของแอปนี้ถูกล้างตอน activate
+// (v3 = ชื่อแคชมี prefix ของแอป + path อิง scope เพื่อเสิร์ฟใต้ /Gemba_Audit/ บน GitHub Pages ได้)
+const CACHE_PREFIX = 'gemba-walk-';
+const VERSION = `${CACHE_PREFIX}v3`;
 const SHELL = `${VERSION}-shell`;
+/** ชื่อแคชรุ่นก่อนที่ยังไม่มี prefix ของแอป (gemba-v1-shell, gemba-v2-shell) */
+const LEGACY_CACHE = /^gemba-v\d+-/;
+
+/**
+ * แอปเสิร์ฟได้ทั้งที่ root (Cloudflare Pages) และใต้ชื่อ repo (topmaha.github.io/Gemba_Audit/)
+ * จึงห้ามเขียน path แบบขึ้นต้นด้วย / ตรง ๆ — ต้องต่อจาก scope ของ service worker เสมอ
+ * (เดิมเขียน /index.html ตรง ๆ บน GitHub Pages จึงแคชผิดที่ และไฟล์ขั้นต่ำโหลดไม่ขึ้น)
+ */
+const inScope = (path) => new URL(String(path).replace(/^\/+/, ''), self.registration.scope).href;
 
 // ไฟล์ขั้นต่ำที่ต้องมีเพื่อให้แอปเปิดขึ้นมาได้
-const PRECACHE = ['/', '/index.html', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png', '/brand/tenneco-logo.png'];
+const PRECACHE = ['', 'index.html', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'brand/tenneco-logo.png'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches
       .open(SHELL)
       // ไฟล์ใดโหลดไม่ได้ก็ไม่ให้ล้มทั้งชุด
-      .then((cache) => Promise.allSettled(PRECACHE.map((url) => cache.add(url))))
+      .then((cache) => Promise.allSettled(PRECACHE.map((path) => cache.add(inScope(path)))))
       .then(() => self.skipWaiting()),
   );
 });
@@ -30,7 +42,15 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches
       .keys()
-      .then((keys) => Promise.all(keys.filter((k) => !k.startsWith(VERSION)).map((k) => caches.delete(k))))
+      // ล้างเฉพาะแคชของแอปนี้ — บน github.io ทุกแอปของบัญชีใช้ origin เดียวกัน (แคชร่วมกัน)
+      // เดิมล้างทุกอันที่ไม่ใช่ของเรา จึงไปลบแคชออฟไลน์ของ GEMBA SAFETY และ QC Audit ทิ้งด้วย
+      .then((keys) =>
+        Promise.all(
+          keys
+            .filter((k) => (k.startsWith(CACHE_PREFIX) && !k.startsWith(VERSION)) || LEGACY_CACHE.test(k))
+            .map((k) => caches.delete(k)),
+        ),
+      )
       .then(() => self.clients.claim()),
   );
 });
@@ -53,10 +73,10 @@ self.addEventListener('fetch', (event) => {
       fetch(req)
         .then((res) => {
           const copy = res.clone();
-          caches.open(SHELL).then((c) => c.put('/index.html', copy));
+          caches.open(SHELL).then((c) => c.put(inScope('index.html'), copy));
           return res;
         })
-        .catch(() => caches.match('/index.html').then((r) => r ?? Response.error())),
+        .catch(() => caches.match(inScope('index.html')).then((r) => r ?? Response.error())),
     );
     return;
   }
