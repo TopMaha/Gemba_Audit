@@ -57,7 +57,6 @@ export const en: Dict = {
     signIn: 'Sign in',
     signOut: 'Sign out',
     managerCode: 'Employee code',
-    codePlaceholder: 'e.g. T-815',
     codeHint: 'Same employee code as PSIF — lowercase or no hyphen is fine',
     wrongCode: 'Code not found',
     inactive: 'This account is inactive. Please contact the admin.',
